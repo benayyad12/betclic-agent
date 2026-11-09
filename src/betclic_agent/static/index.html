@@ -173,7 +173,7 @@ const $ = (id) => document.getElementById(id);
 const SPORT_LABEL = { football: "Football", basketball: "Basketball", tennis: "Tennis", rugby: "Rugby" };
 const STATUS_LABEL = { in_play: "En cours", upcoming: "À venir", past: "Terminé", unknown: "Heure ?" };
 const STATUS_ORDER = ["in_play", "upcoming", "past", "unknown"];
-const REFRESH_MS = 30000;
+const REFRESH_MS = 15000;
 const ANALYSIS_MS = 15000;
 let analysisTimer = null;
 const PLACEHOLDER = `<div class="placeholder"><div class="big">📊</div>Cliquez sur un match pour voir ses cotes, sa marge et les chances selon les cotes.</div>`;
@@ -241,15 +241,8 @@ async function refresh({ silent = false } = {}) {
     if (state.market) params.set("market", state.market);
     const data = await getJson(`/api/today/${encodeURIComponent(state.sport)}?${params}`);
     if (seq !== state.seq) return;
-    state.receivedAt = Date.now();
-    state.matches = data.matches;
-    // Ne re-rend la liste que si quelque chose a changé : évite le clignotement à chaque actualisation.
-    const sig = signatureOf(data);
-    if (sig !== state.signature) {
-      state.signature = sig;
-      renderList();
-    }
-    renderSummary(data);
+    applyData(data);
+    try { localStorage.setItem(SNAP_KEY, JSON.stringify({ key: snapKey(), data })); } catch (_) {}
     $("dot").classList.remove("off");
   } catch (e) {
     if (seq !== state.seq) return;
@@ -257,6 +250,28 @@ async function refresh({ silent = false } = {}) {
     if (!state.matches.length) $("list").innerHTML = `<div class="err">${esc(e.message)}</div>`;
     else $("summary").insertAdjacentHTML("beforeend", `<span class="err">⚠ Mise à jour impossible : ${esc(e.message)}</span>`);
   }
+}
+
+function applyData(data) {
+  state.receivedAt = Date.now();
+  state.matches = data.matches;
+  // Ne re-rend la liste que si quelque chose a changé : évite le clignotement à chaque actualisation.
+  const sig = signatureOf(data);
+  if (sig !== state.signature) {
+    state.signature = sig;
+    renderList();
+  }
+  renderSummary(data);
+}
+
+// Snapshot local : la page s'affiche tout de suite avec les dernières données, le temps que Betclic réponde.
+const SNAP_KEY = "betclic-snapshot";
+function snapKey() { return `${state.sport}|${state.day}|${state.market}`; }
+function loadSnapshot() {
+  try {
+    const snap = JSON.parse(localStorage.getItem(SNAP_KEY) || "null");
+    if (snap && snap.key === snapKey() && snap.data) applyData(snap.data);
+  } catch (_) {}
 }
 
 function renderSummary(data) {
@@ -482,6 +497,7 @@ $("market").addEventListener("change", () => {
 $("search").addEventListener("input", () => renderList());
 
 renderDays();
+loadSnapshot();
 refresh();
 setInterval(() => { if (!document.hidden) refresh({ silent: true }); }, REFRESH_MS);
 setInterval(tickAge, 1000);
