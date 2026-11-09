@@ -102,3 +102,44 @@ def test_prefetch_never_exceeds_concurrency_cap(monkeypatch):
     monkeypatch.setattr(api, "_client", lambda market: SlowClient())
     asyncio.run(api._prefetch_markets([11, 12, 13, 14], "CI"))
     assert state["max"] <= api.PREFETCH_CONCURRENCY
+
+
+def _run_hub_until(monkeypatch, responses, wanted: int) -> list[str]:
+    """Fait tourner un collecteur sur des réponses scriptées et renvoie les types d'événements reçus."""
+    import asyncio
+
+    monkeypatch.setattr(api, "COLLECT_INTERVAL_S", 0)
+    queue_iter = iter(responses)
+
+    async def fake_build(sport, market, day, max_age=0):
+        item = next(queue_iter, None)
+        if item is None:
+            raise RuntimeError("boom")
+        return item
+
+    monkeypatch.setattr(api, "build_today", fake_build)
+
+    async def scenario() -> list[str]:
+        hub = api._Hub()
+        q: asyncio.Queue = asyncio.Queue(maxsize=10)
+        hub.subscribers.add(q)
+        task = asyncio.create_task(api._run_hub(("football", "CI", "2026-01-01"), hub))
+        events = [(await asyncio.wait_for(q.get(), 1))[0] for _ in range(wanted)]
+        hub.subscribers.clear()
+        await task
+        return events
+
+    return asyncio.run(scenario())
+
+
+def test_hub_pushes_data_only_when_odds_change(monkeypatch):
+    responses = [
+        {"matches": [{"id": 1, "odds": 2.0}], "counts": {}},
+        {"matches": [{"id": 1, "odds": 2.0}], "counts": {}},
+        {"matches": [{"id": 1, "odds": 2.5}], "counts": {}},
+    ]
+    assert _run_hub_until(monkeypatch, responses, 3) == ["data", "tick", "data"]
+
+
+def test_hub_reports_betclic_error_as_event(monkeypatch):
+    assert _run_hub_until(monkeypatch, [], 1) == ["error"]

@@ -79,6 +79,17 @@ Le champ `is_live` de la lib est exposé sous le nom `live_stream` : vérifié l
 avaient un coup d'envoi futur). Le statut réel est estimé par `timing.match_status()` à
 partir de l'heure — estimation assumée, documentée dans le README.
 
+## Interface web temps réel (`api.py`, `static/index.html`)
+
+- **Collecteur unique par (sport, marché, jour)** (`_run_hub`) : interroge Betclic toutes les
+  `COLLECT_INTERVAL_S` (15 s), partagé par tous les onglets. Le nombre de requêtes ne dépend pas
+  du nombre de navigateurs ouverts.
+- **Poussée SSE** (`/api/stream/{sport}`) : l'état courant part à la connexion, puis seuls les
+  changements sont envoyés (`data`), ou un `tick` de contrôle si rien n'a bougé. Erreurs : `error`.
+- **Repli REST** : `/api/today/{sport}` reste disponible et sert au rafraîchissement si le flux tombe.
+- **Affichage instantané** : le dernier snapshot est gardé dans `localStorage` et affiché avant la réponse.
+- **Cache REST** : cotes d'un match en stale-while-revalidate (`MATCH_CACHE_TTL_S`, `MATCH_STALE_MAX_S`).
+
 ## Flux d'une journée (`today`)
 
 1. `collect_all_matches(sport, until_day)` → pagination jusqu'à sortie du jour visé

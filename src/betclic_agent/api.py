@@ -8,6 +8,7 @@ Puis ouvrir http://127.0.0.1:8000
 from __future__ import annotations
 
 import asyncio
+import json
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -15,8 +16,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
 
-from fastapi import FastAPI, HTTPException, Query
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from .client_ci import MAX_PAGES, PAGE_SIZE, BetclicMarketClient
@@ -122,13 +123,15 @@ async def _collect_concurrent(sport: str, market: str | None, client: BetclicMar
     }
 
 
-async def _get_collected(sport: str, market: str | None, client: BetclicMarketClient) -> tuple[dict, bool]:
+async def _get_collected(
+    sport: str, market: str | None, client: BetclicMarketClient, max_age: float = CACHE_TTL_S
+) -> tuple[dict, bool]:
     """Renvoie (données, depuis_cache). Un verrou par clé évite deux récupérations simultanées."""
     key = (sport, client.market)
 
     def fresh() -> dict | None:
         entry = _cache.get(key)
-        if entry and time.monotonic() - entry[0] < CACHE_TTL_S:
+        if entry and time.monotonic() - entry[0] < max_age:
             return entry[1]
         return None
 
@@ -161,12 +164,19 @@ async def today(
     market: Market | None = None,
 ) -> dict:
     """Matchs du jour (UTC = heure locale en CI), groupés par statut estimé. Pages récupérées en parallèle."""
-    client = _client(market)
-    day = date or datetime.now(timezone.utc).strftime("%Y-%m-%d")
     try:
-        data, from_cache = await _get_collected(sport, market, client)
+        return await build_today(sport, market, date)
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Betclic indisponible : {exc}") from exc
+
+
+async def build_today(
+    sport: str, market: str | None, date: str | None, max_age: float = CACHE_TTL_S
+) -> dict:
+    """Construit la vue d'une journée (utilisée par REST et par le flux SSE)."""
+    client = _client(market)
+    day = date or datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    data, from_cache = await _get_collected(sport, market, client, max_age)
 
     matches = client.sort_by_time(client.matches_on([dict(m) for m in data["matches"]], day))
     now = datetime.now(timezone.utc)
@@ -199,6 +209,104 @@ async def today(
             "unknown": sum(m["status"] == UNKNOWN for m in matches),
         },
     }
+
+
+COLLECT_INTERVAL_S = 15
+SSE_KEEPALIVE_S = 20
+
+
+class _Hub:
+    """Un collecteur par (sport, marché, jour), partagé par tous les onglets ouverts.
+    Il interroge Betclic une fois par cycle, puis ne pousse que les changements."""
+
+    def __init__(self) -> None:
+        self.subscribers: set[asyncio.Queue] = set()
+        self.latest: tuple[str, dict] | None = None
+        self.signature: str | None = None
+        self.error: str | None = None
+
+
+_hubs: dict[tuple[str, str, str], _Hub] = {}
+
+
+def _publish(hub: _Hub, event: str, payload: dict) -> None:
+    """Dernier message gagne : une file pleine (client lent) est vidée avant d'y poser le nouveau."""
+    if event == "data":
+        hub.latest = (event, payload)
+    for q in hub.subscribers:
+        if q.full():
+            q.get_nowait()
+        q.put_nowait((event, payload))
+
+
+async def _run_hub(key: tuple[str, str, str], hub: _Hub) -> None:
+    sport, market, day = key
+    try:
+        while hub.subscribers:
+            try:
+                payload = await build_today(sport, market, day, max_age=COLLECT_INTERVAL_S)
+                signature = json.dumps(
+                    {"matches": payload["matches"], "counts": payload["counts"]}, sort_keys=True
+                )
+                if signature != hub.signature:
+                    hub.signature = signature
+                    _publish(hub, "data", payload)
+                else:
+                    _publish(hub, "tick", {"checked_at": datetime.now(timezone.utc).isoformat(timespec="seconds")})
+                hub.error = None
+            except Exception as exc:
+                message = str(exc) or exc.__class__.__name__
+                if message != hub.error:
+                    hub.error = message
+                    _publish(hub, "error", {"detail": f"Betclic indisponible : {message}"})
+            await asyncio.sleep(COLLECT_INTERVAL_S)
+    finally:
+        if _hubs.get(key) is hub:
+            del _hubs[key]
+
+
+@app.get("/api/stream/{sport}")
+async def stream(
+    sport: str,
+    request: Request,
+    date: str | None = Query(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
+    market: Market | None = None,
+) -> StreamingResponse:
+    """Flux Server-Sent Events : l'état courant part immédiatement, puis chaque changement est poussé."""
+    name = (market or Settings().market).upper()
+    day = date or datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    key = (sport, name, day)
+    hub = _hubs.get(key)
+    if hub is None:
+        hub = _hubs[key] = _Hub()
+        task = asyncio.create_task(_run_hub(key, hub))
+        _background.add(task)
+        task.add_done_callback(_background.discard)
+
+    queue: asyncio.Queue = asyncio.Queue(maxsize=1)
+    hub.subscribers.add(queue)
+    if hub.latest is not None:
+        queue.put_nowait(hub.latest)
+    elif hub.error is not None:
+        queue.put_nowait(("error", {"detail": f"Betclic indisponible : {hub.error}"}))
+
+    async def events():
+        try:
+            while not await request.is_disconnected():
+                try:
+                    event, payload = await asyncio.wait_for(queue.get(), timeout=SSE_KEEPALIVE_S)
+                except asyncio.TimeoutError:
+                    yield ": keepalive\n\n"
+                    continue
+                yield f"event: {event}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
+        finally:
+            hub.subscribers.discard(queue)
+
+    return StreamingResponse(
+        events(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @app.get("/api/analyze/{match_id}")

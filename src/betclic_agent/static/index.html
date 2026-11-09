@@ -241,9 +241,7 @@ async function refresh({ silent = false } = {}) {
     if (state.market) params.set("market", state.market);
     const data = await getJson(`/api/today/${encodeURIComponent(state.sport)}?${params}`);
     if (seq !== state.seq) return;
-    applyData(data);
-    try { localStorage.setItem(SNAP_KEY, JSON.stringify({ key: snapKey(), data })); } catch (_) {}
-    $("dot").classList.remove("off");
+    handleData(data);
   } catch (e) {
     if (seq !== state.seq) return;
     $("dot").classList.add("off");
@@ -451,6 +449,38 @@ function tickAge() {
   $("ago").textContent = s < 5 ? "à l'instant" : `mis à jour il y a ${s} s`;
 }
 
+function handleData(data) {
+  applyData(data);
+  try { localStorage.setItem(SNAP_KEY, JSON.stringify({ key: snapKey(), data })); } catch (_) {}
+  $("dot").classList.remove("off");
+}
+
+// Flux temps réel (SSE) : le serveur pousse les changements, sans requête à chaque rafraîchissement.
+// Le REST reste le repli si le flux tombe.
+let stream = null;
+let streamOk = false;
+function connectStream() {
+  if (stream) stream.close();
+  streamOk = false;
+  const params = new URLSearchParams({ date: state.day });
+  if (state.market) params.set("market", state.market);
+  const es = new EventSource(`/api/stream/${encodeURIComponent(state.sport)}?${params}`);
+  stream = es;
+  es.addEventListener("open", () => { if (es === stream) streamOk = true; });
+  es.addEventListener("data", (ev) => { if (es === stream) handleData(JSON.parse(ev.data)); });
+  es.addEventListener("tick", () => { if (es === stream) state.receivedAt = Date.now(); });
+  es.addEventListener("error", (ev) => {
+    if (es !== stream) return;
+    if (ev.data) {
+      const { detail } = JSON.parse(ev.data);
+      $("dot").classList.add("off");
+      $("summary").insertAdjacentHTML("beforeend", `<span class="err">⚠ ${esc(detail)}</span>`);
+    } else {
+      streamOk = false;
+    }
+  });
+}
+
 function resetForNewQuery() {
   state.matches = [];
   state.signature = "";
@@ -458,6 +488,7 @@ function resetForNewQuery() {
   state.analysisSeq++;
   clearInterval(analysisTimer);
   $("analysis").innerHTML = PLACEHOLDER;
+  connectStream();
 }
 
 $("sports").addEventListener("click", (ev) => {
@@ -499,7 +530,8 @@ $("search").addEventListener("input", () => renderList());
 renderDays();
 loadSnapshot();
 refresh();
-setInterval(() => { if (!document.hidden) refresh({ silent: true }); }, REFRESH_MS);
+connectStream();
+setInterval(() => { if (!document.hidden && !streamOk) refresh({ silent: true }); }, REFRESH_MS);
 setInterval(tickAge, 1000);
 document.addEventListener("visibilitychange", () => { if (!document.hidden) refresh({ silent: true }); });
 </script>

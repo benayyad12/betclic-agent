@@ -59,6 +59,9 @@ filtre la journée (dates en UTC = heure locale en CI) et groupe par compétitio
 Chaque appel coûte ~15 s (le serveur ne ferme jamais le flux) → compter ~1 min pour
 une journée complète.
 
+Dans l'interface web, les données arrivent en temps réel par Server-Sent Events
+(`/api/stream/{sport}`), mises à jour toutes les 15 s côté serveur. Le REST reste en repli.
+
 ```bash
 PYTHONPATH=src .venv/Scripts/python.exe -m betclic_agent.main today football
 PYTHONPATH=src .venv/Scripts/python.exe -m betclic_agent.main today football --json data/matches_today.json
