@@ -8,6 +8,7 @@ Puis ouvrir http://127.0.0.1:8000
 from __future__ import annotations
 
 import asyncio
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
@@ -34,20 +35,39 @@ def _client(market: str | None) -> BetclicMarketClient:
     return BetclicMarketClient(market=market or settings.market, settings=settings)
 
 
+PAGE_RETRIES = 2
+CACHE_TTL_S = 60
+
+# Cache des matchs complets par (sport, marché) ; seuls les résultats sans page en échec sont mis en cache.
+_cache: dict[tuple[str, str], tuple[float, dict]] = {}
+_locks: dict[tuple[str, str], asyncio.Lock] = {}
+
+
 def _fetch_page(sport: str, market: str | None, offset: int) -> dict:
-    """Appel bloquant exécuté dans un thread, avec son propre client HTTP."""
-    return _client(market).get_matches(sport, offset=offset)
+    """Appel bloquant exécuté dans un thread, avec des nouvelles tentatives espacées."""
+    last_exc: Exception | None = None
+    for attempt in range(PAGE_RETRIES + 1):
+        try:
+            return _client(market).get_matches(sport, offset=offset)
+        except Exception as exc:
+            last_exc = exc
+            if attempt < PAGE_RETRIES:
+                time.sleep(0.5 * (attempt + 1))
+    raise last_exc  # type: ignore[misc]
 
 
-async def _collect_concurrent(sport: str, market: str | None, client: BetclicMarketClient) -> list[dict]:
-    """Récupère toutes les pages en parallèle : la 1re donne le total, les autres partent ensemble."""
+async def _collect_concurrent(sport: str, market: str | None, client: BetclicMarketClient) -> dict:
+    """Récupère les pages en parallèle. La 1re page donne le total ; un échec de page n'annule pas les autres."""
     first = await asyncio.to_thread(_fetch_page, sport, market, 0)
     total = first.get("total") or 0
     last_offset = min(total, MAX_PAGES * PAGE_SIZE) if total else MAX_PAGES * PAGE_SIZE
-    offsets = range(PAGE_SIZE, last_offset, PAGE_SIZE)
-    pages = [first] + list(
-        await asyncio.gather(*(asyncio.to_thread(_fetch_page, sport, market, o) for o in offsets))
+    offsets = list(range(PAGE_SIZE, last_offset, PAGE_SIZE))
+    results = await asyncio.gather(
+        *(asyncio.to_thread(_fetch_page, sport, market, o) for o in offsets),
+        return_exceptions=True,
     )
+    pages = [first] + [r for r in results if not isinstance(r, BaseException)]
+    failed = sum(isinstance(r, BaseException) for r in results)
 
     seen: set = set()
     collected: list[dict] = []
@@ -56,7 +76,33 @@ async def _collect_concurrent(sport: str, market: str | None, client: BetclicMar
             if m.id not in seen:
                 seen.add(m.id)
                 collected.append(client._to_dict(m, sport))
-    return collected
+    return {
+        "matches": collected,
+        "pages": len(pages) + failed,
+        "failed_pages": failed,
+        "fetched_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+    }
+
+
+async def _get_collected(sport: str, market: str | None, client: BetclicMarketClient) -> tuple[dict, bool]:
+    """Renvoie (données, depuis_cache). Un verrou par clé évite deux récupérations simultanées."""
+    key = (sport, client.market)
+
+    def fresh() -> dict | None:
+        entry = _cache.get(key)
+        if entry and time.monotonic() - entry[0] < CACHE_TTL_S:
+            return entry[1]
+        return None
+
+    if (hit := fresh()) is not None:
+        return hit, True
+    async with _locks.setdefault(key, asyncio.Lock()):
+        if (hit := fresh()) is not None:
+            return hit, True
+        data = await _collect_concurrent(sport, market, client)
+        if data["failed_pages"] == 0:
+            _cache[key] = (time.monotonic(), data)
+        return data, False
 
 
 @app.get("/", include_in_schema=False)
@@ -80,11 +126,11 @@ async def today(
     client = _client(market)
     day = date or datetime.now(timezone.utc).strftime("%Y-%m-%d")
     try:
-        collected = await _collect_concurrent(sport, market, client)
+        data, from_cache = await _get_collected(sport, market, client)
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Betclic indisponible : {exc}") from exc
 
-    matches = client.sort_by_time(client.matches_on(collected, day))
+    matches = client.sort_by_time(client.matches_on([dict(m) for m in data["matches"]], day))
     now = datetime.now(timezone.utc)
     for match in matches:
         match["status"] = match_status(match["date"], now)
@@ -94,6 +140,13 @@ async def today(
         "sport": sport,
         "day": day,
         "matches": matches,
+        "source": {
+            "fetched_at": data["fetched_at"],
+            "from_cache": from_cache,
+            "pages": data["pages"],
+            "failed_pages": data["failed_pages"],
+            "complete": data["failed_pages"] == 0,
+        },
         "counts": {
             "in_play": sum(m["status"] == IN_PLAY for m in matches),
             "upcoming": sum(m["status"] == UPCOMING for m in matches),

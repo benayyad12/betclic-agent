@@ -126,7 +126,7 @@
     </header>
 
     <div class="content">
-      <div class="disclaimer">Collecte et analyse de cotes publiques uniquement. Le chargement d'une journée peut prendre environ 1 minute.</div>
+      <div class="disclaimer">Collecte et analyse de cotes publiques uniquement. Les résultats complets sont gardés 60 s en cache ; l'heure des données est affichée au-dessus de la liste.</div>
 
       <div class="kpis" id="kpis">
         <div class="kpi"><div class="label">Matchs</div><div class="value">—</div><div class="sub">Chargez une journée</div></div>
@@ -137,6 +137,7 @@
 
       <section class="panel">
         <h2>Matchs <span id="sportLabel"></span></h2>
+        <div id="source" class="sub" style="margin-bottom:10px"></div>
         <div id="matches" class="status">Choisissez un sport puis cliquez sur « Charger les matchs ».</div>
       </section>
 
@@ -195,18 +196,34 @@ $("sportLabel").textContent = SPORT_LABEL[sport];
 async function loadToday() {
   const btn = $("load");
   btn.disabled = true;
-  $("matches").innerHTML = `<div class="status">Chargement des matchs (≈ 1 min)…</div>`;
+  const started = Date.now();
+  const timer = setInterval(() => {
+    $("matches").innerHTML = `<div class="status">Chargement des matchs… ${Math.round((Date.now() - started) / 1000)} s</div>`;
+  }, 250);
+  $("source").textContent = "";
   try {
     const day = encodeURIComponent($("day").value);
     const data = await getJson(`/api/today/${encodeURIComponent(sport)}?date=${day}${marketParam()}`);
     lastMatches = data.matches;
     renderKpis(data);
+    renderSource(data.source, Math.round((Date.now() - started) / 1000));
     renderMatches(data.matches);
   } catch (e) {
+    $("source").textContent = "";
     $("matches").innerHTML = `<div class="err">${esc(e.message)}</div>`;
   } finally {
+    clearInterval(timer);
     btn.disabled = false;
   }
+}
+
+function renderSource(src, seconds) {
+  const when = src.fetched_at ? new Date(src.fetched_at).toISOString().substring(11, 19) + " UTC" : "—";
+  const origin = src.from_cache ? "depuis le cache (moins de 60 s)" : `récupéré en ${seconds} s`;
+  const warn = src.complete
+    ? ""
+    : ` <span style="color:#f5a524">⚠ Résultats partiels : ${src.failed_pages} page(s) sur ${src.pages} n'ont pas répondu. Rechargez pour compléter.</span>`;
+  $("source").innerHTML = `Données Betclic à ${when} • ${origin} • ${src.pages} page(s)${warn}`;
 }
 
 function renderKpis(data) {
