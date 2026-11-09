@@ -9,6 +9,12 @@ from betclic_agent.config import Settings
 from betclic_agent.timing import UPCOMING, match_status
 
 
+def test_settings_default_market_is_france(monkeypatch):
+    monkeypatch.delenv("BETCLIC_MARKET", raising=False)
+    assert Settings().market == "FR"
+    assert Settings().origin == "https://www.betclic.fr"
+
+
 def test_headers_marche_ci():
     settings = Settings()
     settings.market = "CI"
@@ -27,9 +33,9 @@ def test_headers_marche_fr():
     assert headers["Origin"] == "https://www.betclic.fr"
 
 
-def test_marche_inconnu_retombe_sur_ci():
+def test_marche_inconnu_retombe_sur_la_france():
     client = BetclicMarketClient(market="XX")
-    assert client.origin == "https://www.betclic.ci"
+    assert client.origin == "https://www.betclic.fr"
 
 
 def test_timeouts_issus_de_la_config():

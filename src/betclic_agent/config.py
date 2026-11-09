@@ -33,8 +33,8 @@ def _env_float(name: str, default: float) -> float:
 class Settings:
     """Paramètres de l'agent (tous surchargeables par .env)."""
 
-    # Marché ciblé : CI = Côte d'Ivoire (betclic.ci), FR = France (betclic.fr)
-    market: str = field(default_factory=lambda: os.getenv("BETCLIC_MARKET", "CI").upper())
+    # Marché ciblé : FR = France (défaut, betclic.fr), CI = Côte d'Ivoire, SN = Sénégal
+    market: str = field(default_factory=lambda: os.getenv("BETCLIC_MARKET", "FR").upper())
 
     # Limite de requêtes : rester raisonnable (usage personnel, pas de hammering)
     request_delay_s: float = field(default_factory=lambda: _env_float("REQUEST_DELAY_S", 1.5))
@@ -60,7 +60,7 @@ class Settings:
             "CI": "https://www.betclic.ci",
             "FR": "https://www.betclic.fr",
             "SN": "https://www.betclic.sn",
-        }.get(self.market, "https://www.betclic.ci")
+        }.get(self.market, "https://www.betclic.fr")
 
     def __repr__(self) -> str:  # évite d'exposer les secrets dans les logs
         return f"Settings(market={self.market}, delay={self.request_delay_s}s, seuils={self.min_margin_pct}-{self.max_margin_pct}%)"

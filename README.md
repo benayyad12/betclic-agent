@@ -1,6 +1,6 @@
 # BetclicAgent
 
-Agent de veille des cotes **Betclic Côte d'Ivoire** : collecte les cotes du marché ivoirien,
+Agent de veille des cotes **Betclic France** : collecte les cotes du marché français,
 analyse les marges des marchés et alerte sur les opportunités.
 
 > ⚠️ **Ce projet ne place JAMAIS de pari.** Les CGU de Betclic interdisent l'automatisation
@@ -25,7 +25,7 @@ Résultat : une source de cotes **gratuite et non quota-limitée** pour le march
 - 📊 **Analyse** : probabilités implicites et marge du bookmaker par marché
 - 🎯 **Détection** : repère les marchés dont la marge sort de la fourchette habituelle
 - 🔔 **Alertes** : rapport console + notification Telegram (optionnelle)
-- 🌍 **Multi-marchés** : CI (défaut), FR, SN
+- 🌍 **Multi-marchés** : FR (défaut, France), CI, SN
 
 ## Installation
 
@@ -41,7 +41,7 @@ cp .env.example .env                                          # puis ajuster si 
 ## Usage
 
 ```bash
-# Marché CI par défaut
+# Marché FR par défaut (France, fuseau Europe/Paris)
 PYTHONPATH=src .venv/Scripts/python.exe -m betclic_agent.main sports
 PYTHONPATH=src .venv/Scripts/python.exe -m betclic_agent.main matches football --limit 10
 PYTHONPATH=src .venv/Scripts/python.exe -m betclic_agent.main today football          # matchs du jour (complet)
@@ -89,7 +89,7 @@ Ces deux scripts travaillent sur le JSON déjà collecté (aucune requête rése
 
 | Variable | Défaut | Rôle |
 |---|---|---|
-| `BETCLIC_MARKET` | `CI` | Marché ciblé : `CI`, `FR`, `SN` |
+| `BETCLIC_MARKET` | `FR` | Marché ciblé : `FR` (France), `CI`, `SN` |
 | `REQUEST_DELAY_S` | `1.5` | Délai entre requêtes (usage raisonnable) |
 | `MIN_MARGIN_PCT` | `6.0` | Borne basse de la présélection (marge basse, pas un signal de valeur) |
 | `MAX_MARGIN_PCT` | `12.0` | Marge haute → marché ignoré |
@@ -111,7 +111,7 @@ Une statistique absente est signalée comme absente, jamais inventée.
 ```
 src/betclic_agent/
 ├── config.py       Paramètres (.env) — ne divulgue jamais les secrets dans les logs
-├── client_ci.py    Client Betclic paramétré sur un marché (CI par défaut)
+├── client_ci.py    Client Betclic paramétré sur un marché (FR par défaut)
 ├── markets.py      Probabilités implicites, marges, présélection par marge
 ├── devig.py        Dé-margement : proportionnel, puissance, Shin
 ├── backtest_engine/ Métriques de backtest et walk-forward

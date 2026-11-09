@@ -14,11 +14,13 @@ import os
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
 
 from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -43,9 +45,25 @@ from .timing import (
 )
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
-
-app = FastAPI(title="BetclicAgent")
+LIST_CACHE_DIR = Path(__file__).resolve().parents[2] / "data" / "list_cache"
 logger = logging.getLogger(__name__)
+
+
+def _warm_engine() -> None:
+    try:
+        engine_service.warm()
+    except Exception:
+        logger.info("préchargement moteur reporté", exc_info=True)
+
+
+@asynccontextmanager
+async def _lifespan(_app: FastAPI):
+    threading.Thread(target=_warm_engine, name="engine-warm", daemon=True).start()
+    yield
+
+
+app = FastAPI(title="BetclicAgent", lifespan=_lifespan)
+app.add_middleware(GZipMiddleware, minimum_size=800)
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
@@ -101,14 +119,16 @@ def _client(market: str | None) -> BetclicMarketClient:
 _local = threading.local()
 PAGE_RETRIES = 2
 CACHE_TTL_S = 60
+LIST_FRESH_S = 60
 MATCH_CACHE_TTL_S = 15
 MATCH_STALE_MAX_S = 120
 
-# Cache des matchs complets par (sport, marché) ; seuls les résultats sans page en échec sont mis en cache.
+# Cache des matchs complets par (sport, marché). Un résultat partiel reste servable, mais périmé.
 _cache: dict[tuple[str, str], tuple[float, dict]] = {}
+_list_tasks: dict[tuple[str, str], asyncio.Task] = {}
 _match_cache: dict[tuple[int, str], tuple[float, dict]] = {}
 _refreshing: set[tuple[int, str]] = set()
-PREFETCH_LIMIT = 40
+PREFETCH_LIMIT = 0
 # Pages de la liste du jour récupérées en parallèle (2 max) ; le pré-chargement des cotes reste séquentiel.
 LIST_CONCURRENCY = 8
 PREFETCH_CONCURRENCY = 8
@@ -176,6 +196,85 @@ async def _collect_concurrent(sport: str, market: str | None, client: BetclicMar
     }
 
 
+def _list_key(sport: str, market: str) -> tuple[str, str]:
+    return (sport, market.upper())
+
+
+def _read_list_disk(key: tuple[str, str]) -> dict | None:
+    path = LIST_CACHE_DIR / f"{key[0]}-{key[1]}.json"
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(data, dict) or not isinstance(data.get("matches"), list):
+        return None
+    return data
+
+
+def _write_list_disk(key: tuple[str, str], data: dict) -> None:
+    try:
+        LIST_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        path = LIST_CACHE_DIR / f"{key[0]}-{key[1]}.json"
+        tmp = path.with_suffix(".tmp")
+        tmp.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+        tmp.replace(path)
+    except OSError:
+        logger.info("cache disque indisponible pour %s", key)
+
+
+def _store_list(key: tuple[str, str], data: dict) -> None:
+    fresh = data.get("failed_pages") == 0
+    stamp = time.monotonic() if fresh else time.monotonic() - CACHE_TTL_S - 1
+    _cache[key] = (stamp, data)
+    if data.get("matches") or fresh:
+        _write_list_disk(key, data)
+
+
+def _peek_collected(sport: str, market: str) -> dict | None:
+    """Dernière liste connue, mémoire puis disque. Ne contacte jamais Betclic."""
+    key = _list_key(sport, market)
+    entry = _cache.get(key)
+    if entry:
+        return entry[1]
+    disk = _read_list_disk(key)
+    if disk is None:
+        return None
+    _cache[key] = (time.monotonic() - CACHE_TTL_S - 1, disk)
+    return disk
+
+
+def _list_age(sport: str, market: str) -> float | None:
+    entry = _cache.get(_list_key(sport, market))
+    if entry is None:
+        return None
+    return time.monotonic() - entry[0]
+
+
+def _annotate_forecasts(sport: str, data: dict) -> dict:
+    """Ajoute la prédiction déjà calculée. N'attend pas le chargement du modèle."""
+    if sport != "football" or not engine_service.is_warm():
+        return data
+    matches = []
+    for match in data.get("matches", []):
+        item = dict(match)
+        if not item.get("forecast"):
+            parts = engine_service.split_match_name(item.get("name") or "")
+            if parts:
+                try:
+                    item["forecast"] = engine_service.forecast(*parts)
+                except (UnknownTeam, EngineError) as exc:
+                    item["forecast"] = {"error": str(exc)}
+        matches.append(item)
+    return {**data, "matches": matches}
+
+
+def _short_upstream(exc: Exception) -> str:
+    text = str(exc) or exc.__class__.__name__
+    if any(token in text for token in ("begmedia", "NameResolution", "Failed to resolve", "timed out", "Timeout")):
+        return "Betclic est injoignable. Les dernières données restent affichées."
+    return text if len(text) <= 180 else text[:180] + "…"
+
+
 async def _get_collected(
     sport: str, market: str | None, client: BetclicMarketClient, max_age: float = CACHE_TTL_S
 ) -> tuple[dict, bool]:
@@ -193,10 +292,40 @@ async def _get_collected(
     async with _locks.setdefault(key, asyncio.Lock()):
         if (hit := fresh()) is not None:
             return hit, True
-        data = await _collect_concurrent(sport, market, client)
-        if data["failed_pages"] == 0:
-            _cache[key] = (time.monotonic(), data)
+        try:
+            data = await _collect_concurrent(sport, market, client)
+        except Exception:
+            entry = _cache.get(key)
+            if entry:
+                return entry[1], True
+            raise
+        data = _annotate_forecasts(sport, data)
+        if data["matches"] or data["failed_pages"] == 0:
+            _store_list(key, data)
         return data, False
+
+
+def _schedule_list_refresh(sport: str, market: str) -> None:
+    """Une seule collecte en vol par sport et marché. La requête HTTP n'attend pas."""
+    key = _list_key(sport, market)
+    task = _list_tasks.get(key)
+    if task and not task.done():
+        return
+
+    async def run() -> None:
+        try:
+            await _get_collected(sport, market, _client(market), max_age=LIST_FRESH_S)
+        except Exception:
+            logger.info("rafraîchissement liste %s ignoré", key, exc_info=True)
+        finally:
+            current = _list_tasks.get(key)
+            if current is asyncio.current_task():
+                _list_tasks.pop(key, None)
+
+    task = asyncio.create_task(run())
+    _list_tasks[key] = task
+    _background.add(task)
+    task.add_done_callback(_background.discard)
 
 
 @app.get("/", include_in_schema=False)
@@ -223,21 +352,36 @@ async def today(
     date: str | None = Query(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
     market: Market | None = None,
 ) -> dict:
-    """Matchs du jour (UTC = heure locale en CI), groupés par statut estimé. Pages récupérées en parallèle."""
+    """Matchs du jour. Répond tout de suite avec le dernier état, puis rafraîchit en arrière-plan."""
     try:
-        return await build_today(sport, market, date)
+        return await build_today(sport, market, date, wait=False)
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"Betclic indisponible : {exc}") from exc
+        raise HTTPException(status_code=502, detail=_short_upstream(exc)) from exc
 
 
-async def build_today(
-    sport: str, market: str | None, date: str | None, max_age: float = CACHE_TTL_S
+def _empty_today(client: BetclicMarketClient, sport: str, day: str) -> dict:
+    return {
+        "market": client.market,
+        "sport": sport,
+        "day": day,
+        "timezone": str(market_zone(client.market)),
+        "local_today": market_today(client.market),
+        "matches": [],
+        "pending": True,
+        "source": {
+            "fetched_at": None,
+            "from_cache": False,
+            "pages": 0,
+            "failed_pages": 0,
+            "complete": False,
+        },
+        "counts": {"in_play": 0, "upcoming": 0, "past": 0, "unknown": 0},
+    }
+
+
+def _shape_today(
+    client: BetclicMarketClient, sport: str, day: str, data: dict, from_cache: bool
 ) -> dict:
-    """Construit la vue d'une journée (utilisée par REST et par le flux SSE)."""
-    client = _client(market)
-    day = date or market_today(client.market)
-    data, from_cache = await _get_collected(sport, market, client, max_age)
-
     copied = [dict(m) for m in data["matches"]]
     matches = client.sort_by_time(
         [m for m in copied if kickoff_local_day(m.get("date"), client.market) == day]
@@ -245,14 +389,6 @@ async def build_today(
     now = datetime.now(timezone.utc)
     for match in matches:
         match["status"] = match_status(match["date"], now)
-
-    # Pré-chargement des cotes des matchs encore ouverts (plafonné) : la réponse part sans attendre.
-    open_ids = [m["id"] for m in matches if m["status"] in (UPCOMING, IN_PLAY)][:PREFETCH_LIMIT]
-    if open_ids:
-        task = asyncio.create_task(_prefetch_markets(open_ids, client.market))
-        _background.add(task)
-        task.add_done_callback(_background.discard)
-
     return {
         "market": client.market,
         "sport": sport,
@@ -260,12 +396,13 @@ async def build_today(
         "timezone": str(market_zone(client.market)),
         "local_today": market_today(client.market),
         "matches": matches,
+        "pending": False,
         "source": {
-            "fetched_at": data["fetched_at"],
+            "fetched_at": data.get("fetched_at"),
             "from_cache": from_cache,
-            "pages": data["pages"],
-            "failed_pages": data["failed_pages"],
-            "complete": data["failed_pages"] == 0,
+            "pages": data.get("pages") or 0,
+            "failed_pages": data.get("failed_pages") or 0,
+            "complete": data.get("failed_pages") == 0,
         },
         "counts": {
             "in_play": sum(m["status"] == IN_PLAY for m in matches),
@@ -276,7 +413,37 @@ async def build_today(
     }
 
 
-COLLECT_INTERVAL_S = 15
+async def build_today(
+    sport: str, market: str | None, date: str | None, max_age: float = CACHE_TTL_S, wait: bool = True
+) -> dict:
+    """Construit la vue d'une journée.
+
+    ``wait=False`` (chemin HTTP) ne contacte pas Betclic : cache mémoire, sinon disque,
+    sinon une coquille ``pending``. La collecte part en tâche de fond.
+    """
+    client = _client(market)
+    day = date or market_today(client.market)
+    if not wait:
+        hit = _peek_collected(sport, client.market)
+        age = _list_age(sport, client.market)
+        if hit is None or age is None or age >= LIST_FRESH_S:
+            _schedule_list_refresh(sport, client.market)
+        if hit is None:
+            return _empty_today(client, sport, day)
+        return _shape_today(client, sport, day, hit, from_cache=True)
+
+    data, from_cache = await _get_collected(sport, market, client, max_age)
+    # Pré-chargement des cotes des matchs encore ouverts : la réponse du flux n'attend pas ce détail.
+    shaped = _shape_today(client, sport, day, data, from_cache)
+    open_ids = [m["id"] for m in shaped["matches"] if m["status"] in (UPCOMING, IN_PLAY)][:PREFETCH_LIMIT]
+    if open_ids:
+        task = asyncio.create_task(_prefetch_markets(open_ids, client.market))
+        _background.add(task)
+        task.add_done_callback(_background.discard)
+    return shaped
+
+
+COLLECT_INTERVAL_S = 60
 SSE_KEEPALIVE_S = 20
 
 
@@ -320,10 +487,10 @@ async def _run_hub(key: tuple[str, str, str], hub: _Hub) -> None:
                     _publish(hub, "tick", {"checked_at": datetime.now(timezone.utc).isoformat(timespec="seconds")})
                 hub.error = None
             except Exception as exc:
-                message = str(exc) or exc.__class__.__name__
+                message = _short_upstream(exc)
                 if message != hub.error:
                     hub.error = message
-                    _publish(hub, "error", {"detail": f"Betclic indisponible : {message}"})
+                    _publish(hub, "error", {"detail": message})
             await asyncio.sleep(COLLECT_INTERVAL_S)
     finally:
         if _hubs.get(key) is hub:
@@ -344,6 +511,13 @@ async def stream(
     hub = _hubs.get(key)
     if hub is None:
         hub = _hubs[key] = _Hub()
+        hit = _peek_collected(sport, name)
+        if hit:
+            payload = _shape_today(_client(name), sport, day, hit, from_cache=True)
+            hub.signature = json.dumps(
+                {"matches": payload["matches"], "counts": payload["counts"]}, sort_keys=True
+            )
+            hub.latest = ("data", payload)
         task = asyncio.create_task(_run_hub(key, hub))
         _background.add(task)
         task.add_done_callback(_background.discard)
@@ -353,7 +527,7 @@ async def stream(
     if hub.latest is not None:
         queue.put_nowait(hub.latest)
     elif hub.error is not None:
-        queue.put_nowait(("error", {"detail": f"Betclic indisponible : {hub.error}"}))
+        queue.put_nowait(("error", {"detail": hub.error}))
 
     async def events():
         try:
@@ -445,7 +619,7 @@ def _raise_engine(exc: Exception, home: str, away: str) -> None:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     if isinstance(exc, FileNotFoundError):
         logger.error("Données moteur absentes : %s", exc)
-        raise HTTPException(status_code=503, detail="Données historiques absentes : placez data/Matches.csv.") from exc
+        raise HTTPException(status_code=503, detail="Données historiques absentes : l'extracteur n'a pas pu obtenir Matches.csv.") from exc
     logger.exception("Erreur moteur pour %s vs %s", home, away)
     raise HTTPException(
         status_code=500,

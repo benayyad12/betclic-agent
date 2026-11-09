@@ -254,10 +254,9 @@
     <div class="top-controls">
       <a href="/engine" class="btn-link" style="align-self:center;color:var(--muted);font-size:12px">Centre du jour →</a>
       <select id="market" aria-label="Marché">
-        <option value="">Marché : défaut</option>
-        <option value="CI">CI</option>
-        <option value="FR">FR</option>
-        <option value="SN">SN</option>
+        <option value="FR" selected>France</option>
+        <option value="CI">Côte d'Ivoire</option>
+        <option value="SN">Sénégal</option>
       </select>
       <input type="date" id="day" aria-label="Choisir un jour">
       <span class="live-pill" id="live"><span class="dot off" id="dot"></span><span id="ago">en attente</span></span>
@@ -381,8 +380,8 @@ const PLACEHOLDER = `<div class="placeholder"><div class="big">📊</div>Cliquez
 
 const state = {
   sport: "football",
-  day: new Date().toISOString().substring(0, 10),
-  market: "",
+  day: new Date().toLocaleDateString("en-CA", { timeZone: "Europe/Paris" }),
+  market: "FR",
   matches: [],
   signature: "",
   analysisSig: "",
@@ -409,10 +408,25 @@ function esc(s) {
   return String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
+function zone() { return state.timezone || "Europe/Paris"; }
+
 function hhmm(iso) {
   if (!iso) return "--:--";
   const d = new Date(iso);
-  return isNaN(d) ? "--:--" : d.toISOString().substring(11, 16);
+  if (isNaN(d)) return "--:--";
+  return new Intl.DateTimeFormat("fr-FR", {
+    hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: zone(),
+  }).format(d);
+}
+
+function localStamp(iso, withDate = false) {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (isNaN(d)) return "—";
+  const opts = withDate
+    ? { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: zone() }
+    : { hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23", timeZone: zone() };
+  return new Intl.DateTimeFormat("fr-FR", opts).format(d);
 }
 
 function shiftDay(base, offset) {
@@ -429,8 +443,8 @@ function humanError(message) {
   return m.length > 220 ? m.slice(0, 220) + "…" : m;
 }
 
-async function getJson(url) {
-  const r = await fetch(url);
+async function getJson(url, signal) {
+  const r = await fetch(url, signal ? { signal } : undefined);
   const body = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(humanError(body.detail || `Erreur HTTP ${r.status}`));
   return body;
@@ -456,26 +470,42 @@ function signatureOf(data) {
   return [state.sport, data.day, data.market, ...data.matches.map(m => `${m.id}|${m.status}|${m.live_stream}|${m.date}|${m.name}`)].join(";");
 }
 
+let refreshAbort = null;
 async function refresh({ silent = false } = {}) {
   const seq = ++state.seq;
+  if (refreshAbort) refreshAbort.abort();
+  const ctrl = refreshAbort = new AbortController();
   if (!silent && !state.matches.length) {
-    $("list").innerHTML = `<div class="skeleton" aria-hidden="true"><div></div><div></div><div></div><div></div><div></div></div>`;
+    $("list").innerHTML = `<div class="msg">Liste en cours de mise à jour…</div>`;
   }
   try {
     const params = new URLSearchParams({ date: state.day });
     if (state.market) params.set("market", state.market);
-    const data = await getJson(`/api/today/${encodeURIComponent(state.sport)}?${params}`);
+    const data = await getJson(`/api/today/${encodeURIComponent(state.sport)}?${params}`, ctrl.signal);
     if (seq !== state.seq) return;
+    if (data.pending && !(data.matches || []).length) {
+      if (!state.matches.length) {
+        $("list").innerHTML = `<div class="msg">La liste arrive en arrière-plan. Saisissez un match ci-dessus pour une prédiction immédiate.</div>`;
+      }
+      return;
+    }
     handleData(data);
   } catch (e) {
-    if (seq !== state.seq) return;
+    if (e.name === "AbortError" || seq !== state.seq) return;
     $("dot").classList.add("off");
     if (!state.matches.length) $("list").innerHTML = `<div class="err">${esc(e.message)}</div>`;
-    else $("summary").insertAdjacentHTML("beforeend", `<span class="err">⚠ Mise à jour impossible : ${esc(e.message)}</span>`);
+  }
+}
+
+function absorbForecasts(matches) {
+  for (const m of matches || []) {
+    if (m.forecast && m.forecast.pick_label) state.forecasts[String(m.id)] = m.forecast;
   }
 }
 
 function applyData(data) {
+  if (data.pending && !(data.matches || []).length && state.matches.length) return;
+  absorbForecasts(data.matches);
   state.receivedAt = Date.now();
   state.matches = data.matches;
   // Ne re-rend la liste que si quelque chose a changé : évite le clignotement à chaque actualisation.
@@ -502,7 +532,7 @@ function loadSnapshot() {
 
 function renderSummary(data) {
   const s = data.source;
-  const when = s.fetched_at ? new Date(s.fetched_at).toISOString().substring(11, 19) + " UTC" : "—";
+  const when = s.fetched_at ? localStamp(s.fetched_at) + " (Paris)" : "—";
   const c = data.counts;
   const warn = s.complete ? "" : `<div class="banner" style="flex-basis:100%">⚠ Résultats partiels : ${s.failed_pages} page(s) sur ${s.pages} n'ont pas répondu. La prochaine mise à jour les complètera.</div>`;
   $("summary").innerHTML =
@@ -578,7 +608,10 @@ async function analyzeMatch(id, label, { silent = false } = {}) {
   const box = $("analysis");
   if (!silent) {
     state.analysisSig = "";
-    box.innerHTML = `<div class="msg">Prédiction de ${esc(label)}…</div>`;
+    const known = state.forecasts[String(id)];
+    box.innerHTML = known && known.pick_label
+      ? `<div class="pred-hero"><div class="pred-kicker">Prédiction</div><div class="pred-call">${esc(known.pick_label)}</div><div class="pred-score">${esc(known.score)}</div><div class="pred-meta">${pct(known.pick_probability)} · xG ${num(known.expected_goals && known.expected_goals.home)} – ${num(known.expected_goals && known.expected_goals.away)}</div></div><div class="msg">Détail…</div>`
+      : `<div class="msg">Prédiction de ${esc(label)}…</div>`;
     document.body.dataset.mode = "analysis";
     document.querySelectorAll("[data-view]").forEach(el => el.setAttribute("aria-current", el.dataset.view === "analysis" ? "true" : "false"));
   }
@@ -655,7 +688,7 @@ function engineHero(engine) {
 function renderOverviewHtml(match, data, engine) {
   const reliable = data.markets.filter(m => m.reliable && m.selections.length);
   const others = data.markets.filter(m => !m.reliable);
-  const when = match.date ? new Date(match.date).toISOString().substring(0, 16).replace("T", " ") + " UTC" : "";
+  const when = match.date ? localStamp(match.date, true) + " (Paris)" : "";
 
   let html = engineHero(engine) + (data.oddsError ? `<div class="banner">Cotes indisponibles : ${esc(data.oddsError)}. La prédiction ci-dessus ne dépend pas des cotes.</div>` : "") + `<div class="an-head">
     <div class="an-title">${esc(match.name)}</div>
@@ -979,6 +1012,7 @@ function tickAge() {
 }
 
 function handleData(data) {
+  if (data.pending && !(data.matches || []).length) return;
   applyData(data);
   try { localStorage.setItem(SNAP_KEY, JSON.stringify({ key: snapKey(), data })); } catch (_) {}
   $("dot").classList.remove("off");
@@ -1003,7 +1037,7 @@ function connectStream() {
     if (ev.data) {
       const { detail } = JSON.parse(ev.data);
       $("dot").classList.add("off");
-      $("summary").insertAdjacentHTML("beforeend", `<span class="err">⚠ ${esc(detail)}</span>`);
+      if (!state.matches.length) $("list").innerHTML = `<div class="err">${esc(humanError(detail))}</div>`;
     } else {
       streamOk = false;
     }
@@ -1105,14 +1139,17 @@ async function scheduleForecasts() {
     if (parts) fixtures.push({ id: String(m.id), home: parts[0], away: parts[1] });
   }
   const key = fixtures.map(f => f.id).join(",");
-  if (key === state.forecastKey) return;
+  const missing = fixtures.filter(f => !state.forecasts[f.id]);
+  if (key === state.forecastKey && !missing.length) return;
   state.forecastKey = key;
-  state.forecasts = {};
-  if (!fixtures.length) { renderList(); return; }
+  const keep = {};
+  for (const f of fixtures) if (state.forecasts[f.id]) keep[f.id] = state.forecasts[f.id];
+  state.forecasts = keep;
+  if (!missing.length) { renderList(); return; }
   const seq = ++state.forecastSeq;
-  for (let i = 0; i < fixtures.length; i += 80) {
+  for (let i = 0; i < missing.length; i += 80) {
     try {
-      const data = await postJson("/api/engine/forecasts", { fixtures: fixtures.slice(i, i + 80) });
+      const data = await postJson("/api/engine/forecasts", { fixtures: missing.slice(i, i + 80) });
       if (seq !== state.forecastSeq) return;
       for (const f of data.forecasts || []) if (f.id) state.forecasts[f.id] = f;
       renderList();
@@ -1351,6 +1388,7 @@ $("set-save").addEventListener("click", () => {
 });
 
 async function syncClock() {
+  const prev = state.day;
   const params = new URLSearchParams();
   if (state.market) params.set("market", state.market);
   const clock = await getJson(`/api/clock?${params}`);
@@ -1361,6 +1399,10 @@ async function syncClock() {
     $("day").value = state.day;
   }
   renderDays();
+  if (!state.dayPinned && state.day !== prev) {
+    refresh();
+    connectStream();
+  }
 }
 
 state.prefs = loadPrefs();
@@ -1371,7 +1413,10 @@ getJson("/api/engine/validation")
   .then(v => { state.validation = v; })
   .catch(() => { state.validation = null; })
   .finally(() => { renderKpis(); if (state.anTab === "evidence") showAnTab("evidence"); });
-syncClock().catch(() => {}).finally(() => { loadSnapshot(); refresh(); connectStream(); });
+loadSnapshot();
+refresh();
+connectStream();
+syncClock().catch(() => {});
 setInterval(() => { if (!document.hidden && !streamOk) refresh({ silent: true }); }, REFRESH_MS);
 setInterval(tickAge, 1000);
 document.addEventListener("visibilitychange", () => { if (!document.hidden) refresh({ silent: true }); });

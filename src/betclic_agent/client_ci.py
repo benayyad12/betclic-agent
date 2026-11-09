@@ -6,7 +6,7 @@ distingue uniquement par les en-têtes `x-bg-regulation` + Origin/Referer.
 
 Usage :
     from betclic_agent.client_ci import BetclicMarketClient
-    client = BetclicMarketClient(market="CI")
+    client = BetclicMarketClient(market="FR")
     result = client.get_matches("football")
 """
 
@@ -35,9 +35,9 @@ REGULATION_HEADERS = {
 
 
 class BetclicMarketClient(BetclicClient):
-    """Client Betclic paramétré sur un marché donné (CI par défaut)."""
+    """Client Betclic paramétré sur un marché donné (France par défaut)."""
 
-    def __init__(self, market: str = "CI", settings: Settings | None = None):
+    def __init__(self, market: str = "FR", settings: Settings | None = None):
         cfg = settings or Settings()
         super().__init__(
             locale="fr",
@@ -48,7 +48,7 @@ class BetclicMarketClient(BetclicClient):
             "CI": "https://www.betclic.ci",
             "FR": "https://www.betclic.fr",
             "SN": "https://www.betclic.sn",
-        }.get(self.market, "https://www.betclic.ci")
+        }.get(self.market, "https://www.betclic.fr")
         self.origin = origin
         self._session.headers.update(
             {

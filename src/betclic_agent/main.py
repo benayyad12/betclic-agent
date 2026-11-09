@@ -157,7 +157,7 @@ def build_parser() -> argparse.ArgumentParser:
         prog="betclic-agent",
         description="Veille des cotes Betclic (collecte et analyse — jamais de placement de pari).",
     )
-    parser.add_argument("--market", default=None, help="Marché ciblé : CI (défaut), FR, SN")
+    parser.add_argument("--market", default=None, help="Marché ciblé : FR (défaut), CI, SN")
     sub = parser.add_subparsers(dest="command", required=True)
 
     p_sports = sub.add_parser("sports", help="Liste les sports disponibles")

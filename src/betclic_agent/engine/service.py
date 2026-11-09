@@ -9,7 +9,7 @@ from __future__ import annotations
 import threading
 from datetime import date, timedelta
 
-from . import secondary
+from . import dossier, learn, secondary
 from .dataset import MatchRecord, load_matches
 from .errors import EngineError, UnknownTeam
 from .markets import derive_markets
@@ -48,11 +48,15 @@ def _state_now() -> dict:
                     recent[m.home] = recent.get(m.home, 0) + 1
                     recent[m.away] = recent.get(m.away, 0) + 1
             stats = secondary.fit(matches, as_of)
+            learned, features = learn.fit(matches, as_of)
             _state = {
                 "as_of": as_of,
                 "last_match": matches[-1].date,
                 "model": model,
                 "stats": stats,
+                "dossier": dossier.build(matches, as_of),
+                "learned": learned,
+                "features": features,
                 "index": TeamIndex(names),
                 "recent": recent,
             }
@@ -63,6 +67,16 @@ def reset() -> None:
     global _state
     with _lock:
         _state = None
+
+
+def is_warm() -> bool:
+    """Vrai si le modèle est déjà en mémoire. Une requête ne doit pas attendre le chargement."""
+    return _state is not None
+
+
+def warm() -> None:
+    """Charge le modèle hors du chemin d'une requête. Sans effet si déjà prêt."""
+    _state_now()
 
 
 def _resolve(state: dict, name: str) -> str:
@@ -141,7 +155,13 @@ def predict(home_name: str, away_name: str, odds: dict | None = None) -> dict:
         "secondary": stat_out,
         "value": value,
         "risks": _risks(state, home, away),
-        "method": "Dixon-Coles (Poisson bivarié corrigé), données antérieures à aujourd'hui uniquement",
+        "ratings": {
+            "home": {"attack": model.ratings[home].attack, "defence": model.ratings[home].defence},
+            "away": {"attack": model.ratings[away].attack, "defence": model.ratings[away].defence},
+        },
+        "dossier": state["dossier"].pair(home, away),
+        "ai": state["features"].probabilities(state["learned"], home, away),
+        "method": "Dixon-Coles pour le score ; logistique sur Elo, forme et tirs extraits avant le match. Aucune donnée future.",
     }
 
 
@@ -179,6 +199,12 @@ def forecast(home_name: str, away_name: str) -> dict:
         "goals_probability": over if over >= under else under,
         "data_quality": pred["data_quality"],
         "data_last_match": pred["data_last_match"],
+        "form": {
+            "home": "".join((pred.get("dossier") or {}).get("home", {}).get("form") or []),
+            "away": "".join((pred.get("dossier") or {}).get("away", {}).get("form") or []),
+        },
+        "ai": pred.get("ai"),
+        "elo_gap": (pred.get("dossier") or {}).get("elo_gap"),
     }
 
 

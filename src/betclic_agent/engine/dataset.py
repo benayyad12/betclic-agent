@@ -112,8 +112,18 @@ def parse_matches(lines) -> list[MatchRecord]:
     return records
 
 
+def ensure_dataset(path: Path = DEFAULT_PATH, timeout: int = 60) -> Path:
+    """Utilise le fichier déjà extrait, sinon le télécharge. Aucun dépôt manuel."""
+    if path.exists() and path.stat().st_size > 0:
+        return path
+    try:
+        return fetch_dataset(path, timeout=timeout)
+    except Exception as exc:
+        raise FileNotFoundError(f"Matches.csv introuvable et téléchargement impossible : {exc}") from exc
+
+
 def load_matches(path: Path = DEFAULT_PATH) -> list[MatchRecord]:
-    with open(path, newline="", encoding="utf-8") as handle:
+    with open(ensure_dataset(path), newline="", encoding="utf-8") as handle:
         return parse_matches(handle)
 
 
