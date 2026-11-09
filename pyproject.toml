@@ -14,6 +14,7 @@ dependencies = [
 [project.optional-dependencies]
 cli = ["rich>=13.0.0"]
 web = ["fastapi>=0.110", "uvicorn>=0.29"]
+analysis = ["openai>=1.0"]
 dev = ["pytest>=7.4.0"]
 
 [project.scripts]

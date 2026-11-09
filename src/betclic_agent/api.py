@@ -23,6 +23,7 @@ from fastapi.staticfiles import StaticFiles
 from .client_ci import MAX_PAGES, PAGE_SIZE, BetclicMarketClient
 from .config import Settings
 from .markets import analyze_markets
+from . import soccergpt
 from .timing import IN_PLAY, PAST, UNKNOWN, UPCOMING, match_status
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
@@ -307,6 +308,21 @@ async def stream(
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+@app.get("/api/predict")
+async def predict_endpoint(home: str = Query(min_length=2, max_length=80),
+                           away: str = Query(min_length=2, max_length=80)) -> dict:
+    """Analyse GPT-4o (SoccerGPT) pour home vs away. Sortie de modèle : à valider avant usage."""
+    if home.strip().lower() == away.strip().lower():
+        raise HTTPException(status_code=400, detail="Les deux équipes doivent être différentes.")
+    try:
+        return await asyncio.to_thread(soccergpt.predict, home.strip(), away.strip())
+    except soccergpt.SoccerGPTError as exc:
+        status = 503 if "manquante" in str(exc) else 404 if "introuvable" in str(exc) else 502
+        raise HTTPException(status_code=status, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Analyse indisponible : {exc}") from exc
 
 
 @app.get("/api/analyze/{match_id}")

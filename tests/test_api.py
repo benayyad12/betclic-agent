@@ -143,3 +143,13 @@ def test_hub_pushes_data_only_when_odds_change(monkeypatch):
 
 def test_hub_reports_betclic_error_as_event(monkeypatch):
     assert _run_hub_until(monkeypatch, [], 1) == ["error"]
+
+
+def test_predict_endpoint_rejects_same_team(fake):
+    assert fake.get("/api/predict?home=Spain&away=Spain").status_code == 400
+
+
+def test_predict_endpoint_reports_missing_config(fake, monkeypatch):
+    monkeypatch.delenv("SPORTMONKS_API_TOKEN", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    assert fake.get("/api/predict?home=Spain&away=Italy").status_code == 503
