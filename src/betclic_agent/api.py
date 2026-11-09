@@ -55,6 +55,7 @@ _match_cache: dict[tuple[int, str], tuple[float, dict]] = {}
 PREFETCH_LIMIT = 40
 # Pages de la liste du jour récupérées en parallèle (2 max) ; le pré-chargement des cotes reste séquentiel.
 LIST_CONCURRENCY = 2
+PREFETCH_CONCURRENCY = 2
 _background: set[asyncio.Task] = set()
 
 # Pool dédié : assez de threads pour que toutes les pages d'une journée partent en même temps
@@ -228,13 +229,17 @@ async def _markets_for(match_id: int, name: str) -> dict:
 
 
 async def _prefetch_markets(match_ids: list[int], name: str) -> None:
-    """Charge en arrière-plan les marchés des matchs affichés, un par un, espacés de
-    REQUEST_DELAY_S : une seule requête à la fois vers Betclic. Les erreurs sont ignorées
-    (optimisation, pas obligation)."""
+    """Charge en arrière-plan les marchés des matchs affichés, PREFETCH_CONCURRENCY à la fois
+    (2 max), espacés de REQUEST_DELAY_S. Les erreurs sont ignorées (optimisation, pas obligation)."""
     delay = Settings().request_delay_s
-    for match_id in match_ids:
-        try:
-            await _markets_for(match_id, name)
-        except Exception:
-            pass
-        await asyncio.sleep(delay)
+    sem = asyncio.Semaphore(PREFETCH_CONCURRENCY)
+
+    async def one(match_id: int) -> None:
+        async with sem:
+            try:
+                await _markets_for(match_id, name)
+            except Exception:
+                pass
+            await asyncio.sleep(delay)
+
+    await asyncio.gather(*(one(m) for m in match_ids))

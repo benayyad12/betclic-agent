@@ -61,7 +61,7 @@ def test_prefetch_fills_cache_so_click_is_instant(monkeypatch):
     assert FakeClient.calls == 3
 
 
-def test_prefetch_never_runs_two_requests_at_once(monkeypatch):
+def test_prefetch_never_exceeds_concurrency_cap(monkeypatch):
     import asyncio
     import threading
     import time
@@ -83,4 +83,4 @@ def test_prefetch_never_runs_two_requests_at_once(monkeypatch):
     monkeypatch.setenv("REQUEST_DELAY_S", "0")
     monkeypatch.setattr(api, "_client", lambda market: SlowClient())
     asyncio.run(api._prefetch_markets([11, 12, 13, 14], "CI"))
-    assert state["max"] == 1
+    assert state["max"] <= 2
