@@ -1,0 +1,32 @@
+[project]
+name = "betclic-agent"
+version = "0.1.0"
+description = "Agent de veille des cotes Betclic Côte d'Ivoire — collecte, analyse, alertes (jamais de placement automatique)"
+requires-python = ">=3.10"
+dependencies = [
+    "betclic-api @ git+https://github.com/TapsHTS/betclic-api.git",
+    "requests>=2.31.0",
+    "python-dotenv>=1.0.0",
+]
+
+[project.optional-dependencies]
+cli = ["rich>=13.0.0"]
+web = ["fastapi>=0.110", "uvicorn>=0.29"]
+dev = ["pytest>=7.4.0"]
+
+[project.scripts]
+betclic-agent = "betclic_agent.main:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+betclic_agent = ["static/*.html"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

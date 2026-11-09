@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BetclicAgent — matchs du jour</title>
+<style>
+  :root { --bg:#0f1420; --card:#18202f; --line:#263247; --text:#e6ebf5; --muted:#8a96ab; --ok:#3ecf8e; --warn:#f0b429; --accent:#4f8cff; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: system-ui, sans-serif; background:var(--bg); color:var(--text); }
+  header { padding:16px 24px; border-bottom:1px solid var(--line); display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+  h1 { font-size:18px; margin:0 12px 0 0; }
+  select, input, button { background:var(--card); color:var(--text); border:1px solid var(--line); border-radius:8px; padding:8px 12px; font-size:14px; }
+  button { background:var(--accent); border-color:var(--accent); cursor:pointer; font-weight:600; }
+  button:disabled { opacity:.5; cursor:wait; }
+  .disclaimer { color:var(--muted); font-size:12px; padding:8px 24px; }
+  main { display:grid; grid-template-columns: minmax(300px, 420px) 1fr; gap:16px; padding:16px 24px; }
+  @media (max-width: 800px) { main { grid-template-columns: 1fr; } }
+  .panel { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px; min-height:200px; }
+  .panel h2 { font-size:14px; margin:0 0 10px; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; }
+  .status { color:var(--muted); font-size:13px; margin:8px 0; }
+  .comp { margin:14px 0 6px; font-size:12px; color:var(--accent); font-weight:600; }
+  .match { display:block; width:100%; text-align:left; background:transparent; border:1px solid transparent; color:var(--text); padding:8px; border-radius:8px; font-weight:400; }
+  .match:hover { border-color:var(--line); background:#1e2839; }
+  .match.active { border-color:var(--accent); }
+  .time { color:var(--muted); font-variant-numeric: tabular-nums; margin-right:6px; }
+  .badge { font-size:11px; padding:2px 6px; border-radius:6px; margin-left:6px; background:#263247; color:var(--muted); }
+  .badge.live { background:#3a2d12; color:var(--warn); }
+  table { width:100%; border-collapse:collapse; font-size:13px; margin-bottom:14px; }
+  th, td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--line); }
+  th { color:var(--muted); font-weight:500; }
+  td.num { text-align:right; font-variant-numeric: tabular-nums; }
+  .reliable { color:var(--ok); }
+  .unreliable { color:var(--warn); }
+  .err { color:#ff6b6b; }
+  .legend { color:var(--muted); font-size:12px; margin-top:6px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>BetclicAgent</h1>
+  <label>Sport
+    <select id="sport">
+      <option value="football" selected>Football</option>
+      <option value="basketball">Basketball</option>
+      <option value="tennis">Tennis</option>
+      <option value="rugby">Rugby</option>
+    </select>
+  </label>
+  <label>Marché
+    <select id="market">
+      <option value="">Défaut (.env)</option>
+      <option value="CI">CI</option>
+      <option value="FR">FR</option>
+      <option value="SN">SN</option>
+    </select>
+  </label>
+  <label>Jour <input type="date" id="day"></label>
+  <button id="load">Charger les matchs</button>
+</header>
+<div class="disclaimer">Collecte et analyse de cotes publiques uniquement — aucun pari n'est placé. Le chargement d'une journée peut prendre environ 1 minute.</div>
+
+<main>
+  <section class="panel">
+    <h2>Matchs</h2>
+    <div id="matches" class="status">Choisissez un sport puis cliquez sur « Charger les matchs ».</div>
+  </section>
+  <section class="panel">
+    <h2>Analyse des marchés</h2>
+    <div id="analysis" class="status">Cliquez sur un match pour voir ses cotes et marges.</div>
+  </section>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const STATUS_LABEL = { in_play: "en cours (estimé)", upcoming: "à venir", past: "terminé", unknown: "heure inconnue" };
+const STATUS_ORDER = ["in_play", "upcoming", "past", "unknown"];
+
+function esc(s) {
+  return String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+function localTime(iso) {
+  if (!iso) return "--:--";
+  const d = new Date(iso);
+  return isNaN(d) ? "--:--" : d.toISOString().substring(11, 16);
+}
+
+async function getJson(url) {
+  const r = await fetch(url);
+  const body = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(body.detail || `Erreur HTTP ${r.status}`);
+  return body;
+}
+
+function marketParam() {
+  const m = $("market").value;
+  return m ? `&market=${encodeURIComponent(m)}` : "";
+}
+
+$("day").value = new Date().toISOString().substring(0, 10);
+
+$("load").addEventListener("click", loadToday);
+
+async function loadToday() {
+  const btn = $("load");
+  const box = $("matches");
+  btn.disabled = true;
+  $("analysis").innerHTML = `<div class="status">Cliquez sur un match pour voir ses cotes et marges.</div>`;
+  box.innerHTML = `<div class="status">Chargement des matchs (≈ 1 min)…</div>`;
+  try {
+    const sport = encodeURIComponent($("sport").value);
+    const day = encodeURIComponent($("day").value);
+    const data = await getJson(`/api/today/${sport}?date=${day}${marketParam()}`);
+    renderMatches(data);
+  } catch (e) {
+    box.innerHTML = `<div class="status err">${esc(e.message)}</div>`;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function renderMatches(data) {
+  const box = $("matches");
+  if (!data.matches.length) {
+    box.innerHTML = `<div class="status">Aucun match ${esc(data.sport)} le ${esc(data.day)} (marché ${esc(data.market)}).</div>`;
+    return;
+  }
+  const c = data.counts;
+  let html = `<div class="status">${data.matches.length} match(s) — ${c.in_play} en cours (estimé), ${c.upcoming} à venir, ${c.past} terminés</div>`;
+  for (const status of STATUS_ORDER) {
+    const items = data.matches.filter(m => m.status === status);
+    if (!items.length) continue;
+    html += `<div class="status"><strong>${esc(STATUS_LABEL[status])}</strong> (${items.length})</div>`;
+    const byComp = {};
+    for (const m of items) (byComp[m.competition || "Compétition inconnue"] ??= []).push(m);
+    for (const comp of Object.keys(byComp).sort()) {
+      html += `<div class="comp">${esc(comp)}</div>`;
+      for (const m of byComp[comp]) {
+        const live = m.live_stream ? `<span class="badge live">diffusion</span>` : "";
+        html += `<button class="match" data-id="${m.id}">
+          <span class="time">${localTime(m.date)}</span>${esc(m.name)}${live}</button>`;
+      }
+    }
+  }
+  box.innerHTML = html;
+  box.querySelectorAll(".match").forEach(btn => btn.addEventListener("click", () => {
+    box.querySelectorAll(".match").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    analyzeMatch(btn.dataset.id, btn.textContent.trim());
+  }));
+}
+
+async function analyzeMatch(id, label) {
+  const box = $("analysis");
+  box.innerHTML = `<div class="status">Analyse de ${esc(label)}…</div>`;
+  try {
+    const data = await getJson(`/api/analyze/${encodeURIComponent(id)}?${marketParam().slice(1)}`);
+    renderAnalysis(label, data);
+  } catch (e) {
+    box.innerHTML = `<div class="status err">${esc(e.message)}</div>`;
+  }
+}
+
+function renderAnalysis(label, data) {
+  let html = `<h3 style="margin:0 0 10px">${esc(label)}</h3>`;
+  html += `<table><thead><tr><th>Marché</th><th class="num">Issues</th><th class="num">Marge</th><th>Fiable</th></tr></thead><tbody>`;
+  for (const m of data.markets) {
+    const margin = m.margin_pct === null ? "n/a" : `${m.margin_pct.toFixed(2)} %`;
+    const flag = m.reliable ? `<span class="reliable">✅ oui</span>` : `<span class="unreliable">⚠️ non</span>`;
+    html += `<tr><td>${esc(m.market)}</td><td class="num">${m.outcomes}</td><td class="num">${margin}</td><td>${flag}</td></tr>`;
+  }
+  html += `</tbody></table>`;
+
+  for (const m of data.markets.filter(x => x.reliable)) {
+    html += `<h4 style="margin:12px 0 6px">${esc(m.market)}</h4><table><thead><tr><th>Issue</th><th class="num">Cote</th><th class="num">Probabilité implicite</th></tr></thead><tbody>`;
+    for (const s of m.selections) {
+      const p = s.odds > 1 ? ((100 / s.odds).toFixed(1) + " %") : "n/a";
+      html += `<tr><td>${esc(s.name)}</td><td class="num">${esc(s.odds)}</td><td class="num">${p}</td></tr>`;
+    }
+    html += `</tbody></table>`;
+  }
+  html += `<div class="legend">Probabilité implicite = 1 / cote. Une marge basse signale un bookmaker plus généreux sur ce marché ; seules les marges des marchés ✅ sont interprétables. Ce n'est pas une prédiction du résultat.</div>`;
+  $("analysis").innerHTML = html;
+}
+</script>
+</body>
+</html>
