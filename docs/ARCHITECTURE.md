@@ -154,6 +154,14 @@ Les pages de liste du jour sont récupérées à 2 maximum en parallèle (`LIST_
   si le modèle surestime `p`, le risque réel est plus élevé.
 - Tests : `tests/test_staking.py`.
 
+## Analyse de match (`soccergpt.py`, `GET /api/predict`)
+
+- Client Sportmonks (token dans l'en-tête `Authorization`) → statistiques d'équipe
+  (templates portés de SoccerGPT, Apache-2.0) → `build_match_prompt` → GPT-4o (`ask_model`, import paresseux de `openai`).
+- `parse_prediction` refuse une réponse qui n'est pas un score ; `predict` met le résultat en cache 1 h.
+- Erreurs : 400 équipes identiques, 503 configuration manquante, 404 équipe inconnue, 502 autre échec amont.
+- Tests : `tests/test_soccergpt.py`, `tests/test_api.py` (endpoint).
+
 ## Alertes (`notifier.py`)
 
 - Les valeurs des bookmakers sont échappées (`html.escape`) avant l'envoi en mode HTML.

@@ -94,6 +94,17 @@ Ces deux scripts travaillent sur le JSON déjà collecté (aucune requête rése
 | `MIN_MARGIN_PCT` | `6.0` | Borne basse de la présélection (marge basse, pas un signal de valeur) |
 | `MAX_MARGIN_PCT` | `12.0` | Marge haute → marché ignoré |
 | `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` | — | Alertes Telegram (optionnel) |
+| `SPORTMONKS_API_TOKEN` | — | Statistiques d'équipes pour l'analyse (`/api/predict`) |
+| `OPENAI_API_KEY` / `OPENAI_MODEL` | — / `gpt-4o` | Modèle de prédiction de score (`/api/predict`) |
+| `SOCCERGPT_LEAGUE` / `SOCCERGPT_SEASON` / `SOCCERGPT_COMPETITION` | `Euro Qualification` / `2024` / `Euro` | Filtre des matchs Sportmonks utilisés comme historique (à adapter à la saison courante) |
+
+### Analyse de match (`/api/predict?home=&away=`)
+
+Portage de la logique de [`chrisby/SoccerGPT`](https://github.com/chrisby/SoccerGPT)
+(Apache-2.0) : statistiques Sportmonks → prompt → GPT-4o qui prédit un score.
+Installation optionnelle : `pip install -e ".[analysis]"`.
+Les prédictions sont des sorties de modèle, non calibrées : à valider avec le moteur de backtest avant tout usage.
+Une statistique absente est signalée comme absente, jamais inventée.
 
 ## Architecture
 
@@ -157,3 +168,7 @@ jeu de 3 h. Conséquence assumée : un match reporté est classé `in_play`/`pas
 Le protocole gRPC-web Betclic est implémenté par
 [`TapsHTS/betclic-api`](https://github.com/TapsHTS/betclic-api) (MIT), utilisé comme
 dépendance. Ce projet n'est **ni affilié ni approuvé par Betclic**.
+
+Le module `soccergpt.py` reprend les modèles de statistiques et le prompt de
+[`chrisby/SoccerGPT`](https://github.com/chrisby/SoccerGPT) (Apache-2.0). Modifications
+apportées : clés lues depuis `.env`, joueurs et entraîneurs omis en v1, résultats mis en cache.
