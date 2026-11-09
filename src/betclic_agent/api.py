@@ -8,6 +8,7 @@ Puis ouvrir http://127.0.0.1:8000
 from __future__ import annotations
 
 import asyncio
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
@@ -32,15 +33,25 @@ Market = Literal["CI", "FR", "SN"]
 
 
 def _client(market: str | None) -> BetclicMarketClient:
-    settings = Settings()
-    return BetclicMarketClient(market=market or settings.market, settings=settings)
+    """Un client par thread et par marché : la session HTTP (connexions keep-alive) est réutilisée
+    au lieu d'être recréée à chaque requête. Les threads ne partagent pas de session."""
+    name = (market or Settings().market).upper()
+    clients = getattr(_local, "clients", None)
+    if clients is None:
+        clients = _local.clients = {}
+    if name not in clients:
+        clients[name] = BetclicMarketClient(market=name, settings=Settings())
+    return clients[name]
 
 
+_local = threading.local()
 PAGE_RETRIES = 2
 CACHE_TTL_S = 60
+MATCH_CACHE_TTL_S = 30
 
 # Cache des matchs complets par (sport, marché) ; seuls les résultats sans page en échec sont mis en cache.
 _cache: dict[tuple[str, str], tuple[float, dict]] = {}
+_match_cache: dict[tuple[int, str], tuple[float, dict]] = {}
 
 # Pool dédié : assez de threads pour que toutes les pages d'une journée partent en même temps
 # (le pool par défaut est limité à CPU+4 threads).
@@ -174,16 +185,24 @@ async def today(
 
 
 @app.get("/api/analyze/{match_id}")
-def analyze(match_id: int, market: Market | None = None) -> dict:
-    client = _client(market)
-    try:
-        markets = client.get_main_markets(match_id)
-    except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"Betclic indisponible : {exc}") from exc
+async def analyze(match_id: int, market: Market | None = None) -> dict:
+    """Marchés d'un match. Mis en cache 30 s par (match, marché) pour les clics répétés."""
+    name = (market or Settings().market).upper()
+    key = (match_id, name)
+    entry = _match_cache.get(key)
+    if entry and time.monotonic() - entry[0] < MATCH_CACHE_TTL_S:
+        markets = entry[1]
+    else:
+        try:
+            markets = await asyncio.to_thread(lambda: _client(name).get_main_markets(match_id))
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail=f"Betclic indisponible : {exc}") from exc
+        if markets:
+            _match_cache[key] = (time.monotonic(), markets)
     if not markets:
         raise HTTPException(status_code=404, detail="Aucun marché pour ce match.")
     return {
         "match_id": match_id,
-        "market": client.market,
+        "market": name,
         "markets": analyze_markets(markets),
     }
