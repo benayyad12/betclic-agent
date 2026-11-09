@@ -68,6 +68,11 @@
   .badge.past { background:#252D39; color:var(--muted); }
 
   .status { color:var(--muted); font-size:12px; padding:8px 0; }
+  .skeleton { display:grid; gap:10px; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); }
+  .skeleton div { height:92px; border-radius:10px; background:linear-gradient(90deg,var(--inner) 25%,var(--line) 50%,var(--inner) 75%); background-size:200% 100%; animation:shimmer 1.2s infinite linear; }
+  @keyframes shimmer { to { background-position:-200% 0; } }
+  button:focus-visible, .match:focus-visible, select:focus-visible, input:focus-visible { outline:2px solid var(--accent, #22c55e); outline-offset:2px; }
+  @media (prefers-reduced-motion: reduce) { .skeleton div { animation:none; } }
   .err { color:var(--err); font-size:12px; padding:8px 0; }
   .group-title { color:var(--muted); font-size:11px; margin:14px 0 6px; }
 
@@ -238,8 +243,12 @@ async function loadToday() {
   const btn = $("load");
   btn.disabled = true;
   const started = Date.now();
+  const skeletonHtml = `<div class="status">Chargement des matchs… <span id="elapsed">0</span> s</div>
+      <div class="skeleton" aria-hidden="true"><div></div><div></div><div></div><div></div><div></div><div></div></div>`;
+  $("matches").innerHTML = skeletonHtml;
   const timer = setInterval(() => {
-    $("matches").innerHTML = `<div class="status">Chargement des matchs… ${Math.round((Date.now() - started) / 1000)} s</div>`;
+    const el = $("elapsed");
+    if (el) el.textContent = Math.round((Date.now() - started) / 1000);
   }, 250);
   $("source").textContent = "";
   try {
