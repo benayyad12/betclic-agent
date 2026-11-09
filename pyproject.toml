@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Agent de veille des cotes Betclic Côte d'Ivoire — collecte, analyse, alertes (jamais de placement automatique)"
 requires-python = ">=3.10"
 dependencies = [
-    "betclic-api @ git+https://github.com/TapsHTS/betclic-api.git",
+    "betclic-api @ git+https://github.com/TapsHTS/betclic-api.git@5989c0936e17c98fff392dc20f5d2e8e4048c04e",
     "requests>=2.31.0",
     "python-dotenv>=1.0.0",
     "sqlalchemy>=2.0",
