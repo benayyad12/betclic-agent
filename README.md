@@ -98,7 +98,8 @@ Ces deux scripts travaillent sur le JSON déjà collecté (aucune requête rése
 src/betclic_agent/
 ├── config.py       Paramètres (.env) — ne divulgue jamais les secrets dans les logs
 ├── client_ci.py    Client Betclic paramétré sur un marché (CI par défaut)
-├── markets.py      Probabilités implicites, marges, détection d'opportunités
+├── markets.py      Probabilités implicites, marges, présélection par marge
+├── devig.py        Dé-margement : proportionnel, puissance, Shin
 ├── timing.py       Statut temporel estimé (le backend n'en fournit aucun)
 ├── notifier.py     Rapport console + alertes Telegram
 └── main.py         CLI (sports, matches, today, analyze, scan)

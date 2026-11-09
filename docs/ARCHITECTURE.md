@@ -32,7 +32,8 @@
 |---|---|
 | `config.py` | Charger et exposer les paramètres depuis `.env` (sans fuiter de secrets) |
 | `client_ci.py` | Parler à l'API Betclic pour un marché donné ; simplifier les réponses |
-| `markets.py` | Calculer les probabilités implicites, les marges, et détecter les opportunités |
+| `markets.py` | Calculer les probabilités implicites, les marges, et présélectionner les marchés à marge basse (`find_low_margin_markets`, alias `find_opportunities`) |
+| `devig.py` | Retirer la marge d'un marché : méthodes proportionnelle, puissance et Shin (somme = 1) |
 | `timing.py` | Estimer le statut temporel des matchs (le backend n'en fournit aucun de fiable) |
 | `notifier.py` | Présenter les résultats (console) et alerter (Telegram) |
 | `db/` | Persistance SQLAlchemy 2 : matchs, marchés, historique des cotes en ajout seul, runs |

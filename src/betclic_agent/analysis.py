@@ -14,6 +14,8 @@ from __future__ import annotations
 
 import re
 
+from .devig import proportional
+
 SCORE_PATTERN = re.compile(r"^(\d+)\s*-\s*(\d+)$")
 
 
@@ -24,10 +26,10 @@ def implied_probability(odds: float) -> float:
 
 def demargin(selections: list[dict]) -> dict[str, float]:
     """Probabilités implicites normalisées (marge retirée proportionnellement)."""
-    total = sum(implied_probability(s["odds"]) for s in selections)
-    if total <= 0:
+    raw = [implied_probability(s["odds"]) for s in selections]
+    if sum(raw) <= 0:
         return {}
-    return {s["name"]: implied_probability(s["odds"]) / total for s in selections}
+    return {s["name"]: p for s, p in zip(selections, proportional(raw))}
 
 
 def parse_score(name: str) -> tuple[int, int] | None:
