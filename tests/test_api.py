@@ -83,4 +83,4 @@ def test_prefetch_never_exceeds_concurrency_cap(monkeypatch):
     monkeypatch.setenv("REQUEST_DELAY_S", "0")
     monkeypatch.setattr(api, "_client", lambda market: SlowClient())
     asyncio.run(api._prefetch_markets([11, 12, 13, 14], "CI"))
-    assert state["max"] <= 2
+    assert state["max"] <= api.PREFETCH_CONCURRENCY
