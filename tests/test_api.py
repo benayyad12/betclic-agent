@@ -61,6 +61,24 @@ def test_prefetch_fills_cache_so_click_is_instant(monkeypatch):
     assert FakeClient.calls == 3
 
 
+def test_stale_match_is_served_instantly_and_refreshed_in_background(monkeypatch):
+    import asyncio
+    import time
+
+    api._match_cache.clear()
+    api._refreshing.clear()
+    api._match_cache[(5, "CI")] = (time.monotonic() - 20, {"old": 1})
+    monkeypatch.setattr(api, "_client", lambda market: FakeClient())
+
+    async def scenario():
+        served = await api._markets_for(5, "CI")
+        await asyncio.sleep(0.05)
+        return served
+
+    assert asyncio.run(scenario()) == {"old": 1}
+    assert api._match_cache[(5, "CI")][1] != {"old": 1}
+
+
 def test_prefetch_never_exceeds_concurrency_cap(monkeypatch):
     import asyncio
     import threading

@@ -47,11 +47,13 @@ def _client(market: str | None) -> BetclicMarketClient:
 _local = threading.local()
 PAGE_RETRIES = 2
 CACHE_TTL_S = 60
-MATCH_CACHE_TTL_S = 30
+MATCH_CACHE_TTL_S = 15
+MATCH_STALE_MAX_S = 120
 
 # Cache des matchs complets par (sport, marché) ; seuls les résultats sans page en échec sont mis en cache.
 _cache: dict[tuple[str, str], tuple[float, dict]] = {}
 _match_cache: dict[tuple[int, str], tuple[float, dict]] = {}
+_refreshing: set[tuple[int, str]] = set()
 PREFETCH_LIMIT = 40
 # Pages de la liste du jour récupérées en parallèle (2 max) ; le pré-chargement des cotes reste séquentiel.
 LIST_CONCURRENCY = 8
@@ -217,15 +219,41 @@ async def analyze(match_id: int, market: Market | None = None) -> dict:
 
 
 async def _markets_for(match_id: int, name: str) -> dict:
-    """Renvoie les marchés depuis le cache, sinon les récupère (et les met en cache)."""
+    """Cache « servir vite, rafraîchir ensuite » : moins de 30 s → cache direct ; entre 30 s et
+    MATCH_STALE_MAX_S → cache renvoyé immédiatement + rafraîchissement en arrière-plan.
+    Ainsi le clic est instantané sans jamais attendre Betclic sur un match déjà vu."""
     key = (match_id, name)
     entry = _match_cache.get(key)
-    if entry and time.monotonic() - entry[0] < MATCH_CACHE_TTL_S:
-        return entry[1]
+    if entry:
+        age = time.monotonic() - entry[0]
+        if age < MATCH_CACHE_TTL_S:
+            return entry[1]
+        if age < MATCH_STALE_MAX_S:
+            if key not in _refreshing:
+                _refreshing.add(key)
+                task = asyncio.create_task(_refresh_match(key))
+                _background.add(task)
+                task.add_done_callback(_background.discard)
+            return entry[1]
+    return await _fetch_match(key)
+
+
+async def _fetch_match(key: tuple[int, str]) -> dict:
+    match_id, name = key
     markets = await asyncio.to_thread(lambda: _client(name).get_main_markets(match_id))
     if markets:
         _match_cache[key] = (time.monotonic(), markets)
     return markets
+
+
+async def _refresh_match(key: tuple[int, str]) -> None:
+    try:
+        await _fetch_match(key)
+    except Exception:
+        pass
+    finally:
+        _refreshing.discard(key)
+
 
 
 async def _prefetch_markets(match_ids: list[int], name: str) -> None:
