@@ -100,6 +100,7 @@ src/betclic_agent/
 ├── client_ci.py    Client Betclic paramétré sur un marché (CI par défaut)
 ├── markets.py      Probabilités implicites, marges, présélection par marge
 ├── devig.py        Dé-margement : proportionnel, puissance, Shin
+├── backtest_engine/ Métriques de backtest et walk-forward
 ├── timing.py       Statut temporel estimé (le backend n'en fournit aucun)
 ├── notifier.py     Rapport console + alertes Telegram
 └── main.py         CLI (sports, matches, today, analyze, scan)

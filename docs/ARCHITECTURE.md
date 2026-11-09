@@ -120,6 +120,15 @@ collecte plafonnée à 30 pages avait manqués.
   (IC 95 % [−13.4 %, +1.7 %]). Aucune rentabilité n'est démontrée.
 - Le ROI est optimiste : les cotes de référence ne sont pas celles de Betclic au moment du pari.
 
+## Moteur de backtest (`backtest_engine/`)
+
+- `metrics.py` : Brier, log loss, courbe de calibration, ROI, yield, drawdown maximal,
+  CLV (uniquement si une cote de clôture existe), intervalle bootstrap du ROI.
+  Une métrique sans donnée renvoie `None`, jamais une valeur inventée.
+- `walkforward.py` : découpage chronologique ; l'entraînement précède strictement le test.
+- Chaque métrique est testée sur un cas synthétique à résultat connu (`tests/test_backtest_engine.py`).
+
+
 ## Extensions prévues
 
 - **Comparaison multi-bookmakers** : brancher les cotes Broker/OddsPapi pour détecter
