@@ -5,76 +5,157 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>BetclicAgent — matchs du jour</title>
 <style>
-  :root { --bg:#0f1420; --card:#18202f; --line:#263247; --text:#e6ebf5; --muted:#8a96ab; --ok:#3ecf8e; --warn:#f0b429; --accent:#4f8cff; }
+  :root {
+    --bg:#0B0E13; --side:#141922; --card:#141922; --inner:#0B0E13; --line:#252D39; --hover:#1E2530;
+    --text:#F0F4F8; --muted:#8A99AD; --ok:#00D68F; --warn:#F5A524; --accent:#568BFF; --err:#FF5263;
+  }
   * { box-sizing: border-box; }
-  body { margin:0; font-family: system-ui, sans-serif; background:var(--bg); color:var(--text); }
-  header { padding:16px 24px; border-bottom:1px solid var(--line); display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
-  h1 { font-size:18px; margin:0 12px 0 0; }
-  select, input, button { background:var(--card); color:var(--text); border:1px solid var(--line); border-radius:8px; padding:8px 12px; font-size:14px; }
-  button { background:var(--accent); border-color:var(--accent); cursor:pointer; font-weight:600; }
-  button:disabled { opacity:.5; cursor:wait; }
-  .disclaimer { color:var(--muted); font-size:12px; padding:8px 24px; }
-  main { display:grid; grid-template-columns: minmax(300px, 420px) 1fr; gap:16px; padding:16px 24px; }
-  @media (max-width: 800px) { main { grid-template-columns: 1fr; } }
-  .panel { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px; min-height:200px; }
-  .panel h2 { font-size:14px; margin:0 0 10px; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; }
-  .status { color:var(--muted); font-size:13px; margin:8px 0; }
-  .comp { margin:14px 0 6px; font-size:12px; color:var(--accent); font-weight:600; }
-  .match { display:block; width:100%; text-align:left; background:transparent; border:1px solid transparent; color:var(--text); padding:8px; border-radius:8px; font-weight:400; }
-  .match:hover { border-color:var(--line); background:#1e2839; }
-  .match.active { border-color:var(--accent); }
-  .time { color:var(--muted); font-variant-numeric: tabular-nums; margin-right:6px; }
-  .badge { font-size:11px; padding:2px 6px; border-radius:6px; margin-left:6px; background:#263247; color:var(--muted); }
-  .badge.live { background:#3a2d12; color:var(--warn); }
-  table { width:100%; border-collapse:collapse; font-size:13px; margin-bottom:14px; }
-  th, td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--line); }
-  th { color:var(--muted); font-weight:500; }
-  td.num { text-align:right; font-variant-numeric: tabular-nums; }
-  .reliable { color:var(--ok); }
-  .unreliable { color:var(--warn); }
-  .err { color:#ff6b6b; }
-  .legend { color:var(--muted); font-size:12px; margin-top:6px; }
+  body { margin:0; font-family: system-ui, sans-serif; background:var(--bg); color:var(--text); font-size:13px; }
+  .layout { display:flex; height:100vh; overflow:hidden; }
+
+  /* Sidebar */
+  aside { width:230px; background:var(--side); border-right:1px solid var(--line); padding:18px 14px; display:flex; flex-direction:column; gap:18px; }
+  .brand { font-weight:700; font-size:16px; letter-spacing:.05em; }
+  .brand span { color:var(--ok); }
+  .brand small { display:block; color:var(--muted); font-weight:400; font-size:10px; letter-spacing:.15em; font-family:ui-monospace, monospace; }
+  .nav-title { color:var(--muted); font-size:10px; text-transform:uppercase; letter-spacing:.12em; margin-bottom:6px; }
+  .nav button { display:flex; align-items:center; gap:10px; width:100%; text-align:left; background:transparent; border:1px solid transparent; color:var(--muted); padding:9px 12px; border-radius:8px; font-size:13px; font-weight:500; cursor:pointer; }
+  .nav button:hover { background:var(--hover); color:var(--text); }
+  .nav button.active { background:rgba(0,214,143,.12); color:var(--ok); border-color:rgba(0,214,143,.3); }
+  .nav button:disabled { opacity:.4; cursor:not-allowed; }
+  .soon { margin-left:auto; font-size:9px; color:var(--muted); border:1px solid var(--line); border-radius:4px; padding:1px 4px; }
+  .side-foot { margin-top:auto; border-top:1px solid var(--line); padding-top:12px; color:var(--muted); font-size:11px; }
+  .side-foot b { color:var(--ok); font-weight:600; }
+
+  /* Main */
+  .main { flex:1; display:flex; flex-direction:column; min-width:0; }
+  header { height:64px; border-bottom:1px solid var(--line); background:var(--side); padding:0 22px; display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+  header input, header select { background:var(--inner); color:var(--text); border:1px solid var(--line); border-radius:8px; padding:7px 10px; font-size:12px; }
+  header input[type=search] { flex:1; min-width:180px; max-width:360px; }
+  header input:focus, header select:focus { outline:none; border-color:var(--ok); }
+  header label { color:var(--muted); font-size:12px; display:flex; align-items:center; gap:6px; }
+  .btn { background:var(--ok); color:#0B0E13; border:none; border-radius:8px; padding:8px 14px; font-weight:700; font-size:12px; cursor:pointer; }
+  .btn:disabled { opacity:.5; cursor:wait; }
+  .spacer { flex:1; }
+  .pill { font-family:ui-monospace, monospace; font-size:11px; padding:5px 10px; border-radius:999px; border:1px solid rgba(245,165,36,.3); background:rgba(245,165,36,.1); color:var(--warn); }
+
+  .content { flex:1; overflow-y:auto; padding:22px; display:grid; grid-template-columns: minmax(0,1fr) 380px; gap:18px; align-content:start; }
+  @media (max-width: 1100px) { .content { grid-template-columns: 1fr; } }
+  .disclaimer { grid-column:1 / -1; color:var(--muted); font-size:12px; }
+
+  .kpis { grid-column:1 / -1; display:grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap:12px; }
+  @media (max-width: 800px) { .kpis { grid-template-columns: repeat(2, minmax(0,1fr)); } }
+  .kpi { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px; }
+  .kpi .label { color:var(--muted); font-size:11px; }
+  .kpi .value { font-size:22px; font-weight:700; font-family:ui-monospace, monospace; margin-top:6px; }
+  .kpi .sub { color:var(--muted); font-size:10px; margin-top:4px; }
+
+  .panel { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; min-height:160px; }
+  .panel h2 { font-size:12px; margin:0 0 12px; color:var(--muted); text-transform:uppercase; letter-spacing:.08em; display:flex; justify-content:space-between; align-items:center; }
+  .panel h2 span { text-transform:none; letter-spacing:0; font-weight:400; }
+
+  .comp { color:var(--accent); font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; margin:14px 0 8px; }
+  .comp:first-child { margin-top:0; }
+  .matches { display:grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap:10px; }
+  .match { background:var(--inner); border:1px solid var(--line); border-radius:10px; padding:12px; text-align:left; color:var(--text); cursor:pointer; font:inherit; display:flex; flex-direction:column; gap:8px; }
+  .match:hover { border-color:rgba(86,139,255,.5); background:var(--hover); }
+  .match.active { border-color:var(--ok); box-shadow:0 0 0 1px rgba(0,214,143,.3); }
+  .match-top { display:flex; justify-content:space-between; align-items:center; color:var(--muted); font-size:11px; font-family:ui-monospace, monospace; }
+  .match-name { font-weight:600; font-size:13px; line-height:1.4; }
+  .badge { font-size:10px; padding:2px 6px; border-radius:6px; background:#252D39; color:var(--muted); }
+  .badge.live { background:rgba(245,165,36,.15); color:var(--warn); }
+  .badge.upcoming { background:rgba(86,139,255,.15); color:var(--accent); }
+  .badge.past { background:#252D39; color:var(--muted); }
+
+  .status { color:var(--muted); font-size:12px; padding:8px 0; }
+  .err { color:var(--err); font-size:12px; padding:8px 0; }
+  .group-title { color:var(--muted); font-size:11px; margin:14px 0 6px; }
+
+  .detail-title { font-size:16px; font-weight:700; margin:0 0 4px; }
+  .detail-meta { color:var(--muted); font-size:11px; margin-bottom:14px; font-family:ui-monospace, monospace; }
+  table { width:100%; border-collapse:collapse; font-size:12px; margin-bottom:14px; }
+  th, td { text-align:left; padding:7px 6px; border-bottom:1px solid var(--line); }
+  th { color:var(--muted); font-weight:500; font-size:11px; }
+  td.num, th.num { text-align:right; font-family:ui-monospace, monospace; font-variant-numeric:tabular-nums; }
+  .ok { color:var(--ok); }
+  .warn { color:var(--warn); }
+  .sub-title { color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:.06em; margin:14px 0 6px; }
+  .bar { height:6px; background:var(--inner); border-radius:3px; overflow:hidden; margin-top:4px; }
+  .bar > div { height:100%; background:var(--accent); }
+  .legend { color:var(--muted); font-size:11px; line-height:1.5; margin-top:10px; }
 </style>
 </head>
 <body>
-<header>
-  <h1>BetclicAgent</h1>
-  <label>Sport
-    <select id="sport">
-      <option value="football" selected>Football</option>
-      <option value="basketball">Basketball</option>
-      <option value="tennis">Tennis</option>
-      <option value="rugby">Rugby</option>
-    </select>
-  </label>
-  <label>Marché
-    <select id="market">
-      <option value="">Défaut (.env)</option>
-      <option value="CI">CI</option>
-      <option value="FR">FR</option>
-      <option value="SN">SN</option>
-    </select>
-  </label>
-  <label>Jour <input type="date" id="day"></label>
-  <button id="load">Charger les matchs</button>
-</header>
-<div class="disclaimer">Collecte et analyse de cotes publiques uniquement — aucun pari n'est placé. Le chargement d'une journée peut prendre environ 1 minute.</div>
+<div class="layout">
 
-<main>
-  <section class="panel">
-    <h2>Matchs</h2>
-    <div id="matches" class="status">Choisissez un sport puis cliquez sur « Charger les matchs ».</div>
-  </section>
-  <section class="panel">
-    <h2>Analyse des marchés</h2>
-    <div id="analysis" class="status">Cliquez sur un match pour voir ses cotes et marges.</div>
-  </section>
-</main>
+  <aside>
+    <div class="brand">BETCLIC <span>AI</span><small>ODDS MONITOR</small></div>
+    <div class="nav">
+      <div class="nav-title">Sports</div>
+      <button data-sport="football" class="active">⚽ Football</button>
+      <button data-sport="basketball">🏀 Basketball</button>
+      <button data-sport="tennis">🎾 Tennis</button>
+      <button data-sport="rugby">🏉 Rugby</button>
+    </div>
+    <div class="nav">
+      <div class="nav-title">Vues</div>
+      <button disabled>📊 Vue d'ensemble <span class="soon">bientôt</span></button>
+      <button disabled>🎯 Value bets <span class="soon">bientôt</span></button>
+    </div>
+    <div class="side-foot">
+      Moteur : <b>Lecture publique</b><br>
+      Aucun pari n'est placé par cet outil.
+    </div>
+  </aside>
+
+  <div class="main">
+    <header>
+      <input type="search" id="search" placeholder="Rechercher une équipe, un tournoi…">
+      <label>Jour <input type="date" id="day"></label>
+      <label>Marché
+        <select id="market">
+          <option value="">Défaut (.env)</option>
+          <option value="CI">CI</option>
+          <option value="FR">FR</option>
+          <option value="SN">SN</option>
+        </select>
+      </label>
+      <button class="btn" id="load">Charger les matchs</button>
+      <div class="spacer"></div>
+      <span class="pill">DONNÉES BETCLIC</span>
+    </header>
+
+    <div class="content">
+      <div class="disclaimer">Collecte et analyse de cotes publiques uniquement. Le chargement d'une journée peut prendre environ 1 minute.</div>
+
+      <div class="kpis" id="kpis">
+        <div class="kpi"><div class="label">Matchs</div><div class="value">—</div><div class="sub">Chargez une journée</div></div>
+        <div class="kpi"><div class="label">En cours (estimé)</div><div class="value">—</div><div class="sub">Selon l'heure de coup d'envoi</div></div>
+        <div class="kpi"><div class="label">À venir</div><div class="value">—</div><div class="sub">Coup d'envoi futur</div></div>
+        <div class="kpi"><div class="label">Compétitions</div><div class="value">—</div><div class="sub">Dans la journée</div></div>
+      </div>
+
+      <section class="panel">
+        <h2>Matchs <span id="sportLabel"></span></h2>
+        <div id="matches" class="status">Choisissez un sport puis cliquez sur « Charger les matchs ».</div>
+      </section>
+
+      <section class="panel">
+        <h2>Analyse des marchés</h2>
+        <div id="analysis" class="status">Cliquez sur un match pour voir ses cotes et marges.</div>
+      </section>
+    </div>
+  </div>
+</div>
 
 <script>
 const $ = (id) => document.getElementById(id);
+const SPORT_LABEL = { football: "Football", basketball: "Basketball", tennis: "Tennis", rugby: "Rugby" };
 const STATUS_LABEL = { in_play: "en cours (estimé)", upcoming: "à venir", past: "terminé", unknown: "heure inconnue" };
 const STATUS_ORDER = ["in_play", "upcoming", "past", "unknown"];
+
+let sport = "football";
+let lastMatches = [];
 
 function esc(s) {
   return String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -99,55 +180,78 @@ function marketParam() {
 }
 
 $("day").value = new Date().toISOString().substring(0, 10);
-
 $("load").addEventListener("click", loadToday);
+$("search").addEventListener("input", () => renderMatches(lastMatches));
+
+document.querySelectorAll(".nav button[data-sport]").forEach(btn => btn.addEventListener("click", () => {
+  document.querySelectorAll(".nav button[data-sport]").forEach(b => b.classList.remove("active"));
+  btn.classList.add("active");
+  sport = btn.dataset.sport;
+  $("sportLabel").textContent = SPORT_LABEL[sport];
+  loadToday();
+}));
+$("sportLabel").textContent = SPORT_LABEL[sport];
 
 async function loadToday() {
   const btn = $("load");
-  const box = $("matches");
   btn.disabled = true;
-  $("analysis").innerHTML = `<div class="status">Cliquez sur un match pour voir ses cotes et marges.</div>`;
-  box.innerHTML = `<div class="status">Chargement des matchs (≈ 1 min)…</div>`;
+  $("matches").innerHTML = `<div class="status">Chargement des matchs (≈ 1 min)…</div>`;
   try {
-    const sport = encodeURIComponent($("sport").value);
     const day = encodeURIComponent($("day").value);
-    const data = await getJson(`/api/today/${sport}?date=${day}${marketParam()}`);
-    renderMatches(data);
+    const data = await getJson(`/api/today/${encodeURIComponent(sport)}?date=${day}${marketParam()}`);
+    lastMatches = data.matches;
+    renderKpis(data);
+    renderMatches(data.matches);
   } catch (e) {
-    box.innerHTML = `<div class="status err">${esc(e.message)}</div>`;
+    $("matches").innerHTML = `<div class="err">${esc(e.message)}</div>`;
   } finally {
     btn.disabled = false;
   }
 }
 
-function renderMatches(data) {
+function renderKpis(data) {
+  const c = data.counts;
+  const comps = new Set(data.matches.map(m => m.competition || "")).size;
+  const kpi = (label, value, sub) => `<div class="kpi"><div class="label">${label}</div><div class="value">${value}</div><div class="sub">${sub}</div></div>`;
+  $("kpis").innerHTML =
+    kpi("Matchs", data.matches.length, `${esc(SPORT_LABEL[sport])} • ${esc(data.day)}`) +
+    kpi("En cours (estimé)", c.in_play, "Selon l'heure de coup d'envoi") +
+    kpi("À venir", c.upcoming, "Coup d'envoi futur") +
+    kpi("Compétitions", comps, `Marché ${esc(data.market)}`);
+}
+
+function renderMatches(matches) {
   const box = $("matches");
-  if (!data.matches.length) {
-    box.innerHTML = `<div class="status">Aucun match ${esc(data.sport)} le ${esc(data.day)} (marché ${esc(data.market)}).</div>`;
+  const q = $("search").value.trim().toLowerCase();
+  const filtered = q ? matches.filter(m => `${m.name} ${m.competition}`.toLowerCase().includes(q)) : matches;
+  if (!filtered.length) {
+    box.innerHTML = `<div class="status">Aucun match${q ? " pour cette recherche" : ""}.</div>`;
     return;
   }
-  const c = data.counts;
-  let html = `<div class="status">${data.matches.length} match(s) — ${c.in_play} en cours (estimé), ${c.upcoming} à venir, ${c.past} terminés</div>`;
+  let html = "";
   for (const status of STATUS_ORDER) {
-    const items = data.matches.filter(m => m.status === status);
+    const items = filtered.filter(m => m.status === status);
     if (!items.length) continue;
-    html += `<div class="status"><strong>${esc(STATUS_LABEL[status])}</strong> (${items.length})</div>`;
+    html += `<div class="group-title">${esc(STATUS_LABEL[status])} (${items.length})</div>`;
     const byComp = {};
     for (const m of items) (byComp[m.competition || "Compétition inconnue"] ??= []).push(m);
     for (const comp of Object.keys(byComp).sort()) {
-      html += `<div class="comp">${esc(comp)}</div>`;
+      html += `<div class="comp">${esc(comp)}</div><div class="matches">`;
       for (const m of byComp[comp]) {
         const live = m.live_stream ? `<span class="badge live">diffusion</span>` : "";
-        html += `<button class="match" data-id="${m.id}">
-          <span class="time">${localTime(m.date)}</span>${esc(m.name)}${live}</button>`;
+        html += `<button class="match" data-id="${esc(m.id)}" data-name="${esc(m.name)}">
+          <div class="match-top"><span>${localTime(m.date)}</span>${live}</div>
+          <div class="match-name">${esc(m.name)}</div>
+        </button>`;
       }
+      html += `</div>`;
     }
   }
   box.innerHTML = html;
   box.querySelectorAll(".match").forEach(btn => btn.addEventListener("click", () => {
     box.querySelectorAll(".match").forEach(b => b.classList.remove("active"));
     btn.classList.add("active");
-    analyzeMatch(btn.dataset.id, btn.textContent.trim());
+    analyzeMatch(btn.dataset.id, btn.dataset.name);
   }));
 }
 
@@ -158,25 +262,27 @@ async function analyzeMatch(id, label) {
     const data = await getJson(`/api/analyze/${encodeURIComponent(id)}?${marketParam().slice(1)}`);
     renderAnalysis(label, data);
   } catch (e) {
-    box.innerHTML = `<div class="status err">${esc(e.message)}</div>`;
+    box.innerHTML = `<div class="err">${esc(e.message)}</div>`;
   }
 }
 
 function renderAnalysis(label, data) {
-  let html = `<h3 style="margin:0 0 10px">${esc(label)}</h3>`;
+  let html = `<div class="detail-title">${esc(label)}</div>`;
+  html += `<div class="detail-meta">${esc(SPORT_LABEL[sport])} • marché ${esc(data.market ?? "")}</div>`;
   html += `<table><thead><tr><th>Marché</th><th class="num">Issues</th><th class="num">Marge</th><th>Fiable</th></tr></thead><tbody>`;
   for (const m of data.markets) {
     const margin = m.margin_pct === null ? "n/a" : `${m.margin_pct.toFixed(2)} %`;
-    const flag = m.reliable ? `<span class="reliable">✅ oui</span>` : `<span class="unreliable">⚠️ non</span>`;
+    const flag = m.reliable ? `<span class="ok">✅ oui</span>` : `<span class="warn">⚠️ non</span>`;
     html += `<tr><td>${esc(m.market)}</td><td class="num">${m.outcomes}</td><td class="num">${margin}</td><td>${flag}</td></tr>`;
   }
   html += `</tbody></table>`;
 
   for (const m of data.markets.filter(x => x.reliable)) {
-    html += `<h4 style="margin:12px 0 6px">${esc(m.market)}</h4><table><thead><tr><th>Issue</th><th class="num">Cote</th><th class="num">Probabilité implicite</th></tr></thead><tbody>`;
+    html += `<div class="sub-title">${esc(m.market)}</div><table><thead><tr><th>Issue</th><th class="num">Cote</th><th class="num">Probabilité implicite</th></tr></thead><tbody>`;
     for (const s of m.selections) {
-      const p = s.odds > 1 ? ((100 / s.odds).toFixed(1) + " %") : "n/a";
-      html += `<tr><td>${esc(s.name)}</td><td class="num">${esc(s.odds)}</td><td class="num">${p}</td></tr>`;
+      const pct = s.odds > 1 ? 100 / s.odds : 0;
+      const p = pct ? pct.toFixed(1) + " %" : "n/a";
+      html += `<tr><td>${esc(s.name)}<div class="bar"><div style="width:${Math.min(pct, 100)}%"></div></div></td><td class="num">${esc(s.odds)}</td><td class="num">${p}</td></tr>`;
     }
     html += `</tbody></table>`;
   }
