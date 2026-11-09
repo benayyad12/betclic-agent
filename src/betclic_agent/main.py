@@ -114,6 +114,20 @@ def cmd_analyze(client: BetclicMarketClient, args) -> int:
     return 0
 
 
+def cmd_collect(client: BetclicMarketClient, args) -> int:
+    from .collector import collect_once
+    from .db.repository import create_schema, make_engine, make_session_factory
+
+    engine = make_engine(args.settings.database_url)
+    create_schema(engine)
+    factory = make_session_factory(engine)
+    result = collect_once(
+        client, factory, sport=args.sport, limit=args.limit, delay_s=args.settings.request_delay_s
+    )
+    print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
+    return 0 if result["status"] == "ok" else 1
+
+
 def cmd_scan(client: BetclicMarketClient, args) -> int:
     settings = args.settings
     matches = client.collect_matches(args.sport, limit=args.limit)
@@ -164,6 +178,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_analyze = sub.add_parser("analyze", help="Analyse les marchés d'un match")
     p_analyze.add_argument("match_id", type=int)
     p_analyze.set_defaults(func=cmd_analyze)
+
+    p_collect = sub.add_parser("collect", help="Collecte séquentielle et persistance en base (DATABASE_URL)")
+    p_collect.add_argument("sport", nargs="?", default="football")
+    p_collect.add_argument("--limit", type=int, default=40)
+    p_collect.set_defaults(func=cmd_collect)
 
     p_scan = sub.add_parser("scan", help="Veille complète avec détection d'opportunités")
     p_scan.add_argument("sport", nargs="?", default="football")
