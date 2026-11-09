@@ -83,6 +83,47 @@
   .bar { height:6px; background:var(--inner); border-radius:3px; overflow:hidden; margin-top:4px; }
   .bar > div { height:100%; background:var(--accent); }
   .legend { color:var(--muted); font-size:11px; line-height:1.5; margin-top:10px; }
+
+  .an-title { font-size:17px; font-weight:700; line-height:1.3; }
+  .an-meta { color:var(--muted); font-size:11px; margin-top:4px; }
+  .an-summary { border-left:3px solid var(--muted); background:var(--inner); border-radius:8px; padding:12px; margin:14px 0; line-height:1.5; }
+  .an-sub { color:var(--muted); font-size:12px; margin-top:4px; }
+  .an-summary.good { border-color:var(--ok); }
+  .an-summary.mid { border-color:var(--warn); }
+  .an-summary.bad { border-color:var(--err); }
+  .an-card { border:1px solid var(--line); border-radius:10px; padding:12px; margin-bottom:10px; background:var(--inner); }
+  .an-card-head { display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap; }
+  .an-market { font-weight:600; font-size:13px; }
+  .an-margin { color:var(--muted); font-size:11px; margin:4px 0 6px; }
+  .an-verdict { font-size:11px; font-weight:600; padding:3px 8px; border-radius:999px; white-space:nowrap; }
+  .an-verdict.good { background:rgba(0,214,143,.15); color:var(--ok); }
+  .an-verdict.mid { background:rgba(245,165,36,.15); color:var(--warn); }
+  .an-verdict.bad { background:rgba(255,82,99,.15); color:var(--err); }
+  .an-verdict.neutral { background:#252D39; color:var(--muted); }
+  .an-row { border-top:1px solid var(--line); padding:8px 0; }
+  .an-line { display:flex; justify-content:space-between; gap:8px; font-size:13px; }
+  .an-out { font-weight:500; }
+  .an-odds { color:var(--muted); font-family:ui-monospace, monospace; }
+  .an-bar { height:8px; background:var(--card); border-radius:4px; overflow:hidden; margin:6px 0 4px; }
+  .an-bar > div { height:100%; background:var(--accent); }
+  .an-chances { display:flex; justify-content:space-between; gap:8px; font-size:11px; color:var(--muted); }
+  .an-chances b { color:var(--text); }
+  .an-more { margin-top:12px; color:var(--muted); font-size:12px; }
+  .an-more summary { cursor:pointer; color:var(--text); }
+  .an-more ul { padding-left:18px; line-height:1.6; }
+
+  @media (max-width: 800px) {
+    .layout { flex-direction:column; height:auto; overflow:visible; }
+    aside { width:auto; flex-direction:row; flex-wrap:wrap; align-items:center; gap:12px; padding:12px; }
+    aside .nav { display:flex; flex-wrap:wrap; gap:6px; }
+    aside .nav-title { width:100%; margin-bottom:0; }
+    aside .nav button { width:auto; padding:6px 10px; }
+    .side-foot, aside .nav + .nav { display:none; }
+    header { height:auto; padding:12px; }
+    header input[type=search] { max-width:none; width:100%; }
+    .content { padding:12px; }
+    .panel { min-height:0; }
+  }
 </style>
 </head>
 <body>
@@ -277,33 +318,75 @@ async function analyzeMatch(id, label) {
   box.innerHTML = `<div class="status">Analyse de ${esc(label)}…</div>`;
   try {
     const data = await getJson(`/api/analyze/${encodeURIComponent(id)}?${marketParam().slice(1)}`);
-    renderAnalysis(label, data);
+    renderAnalysis(lastMatches.find(m => String(m.id) === String(id)) || { name: label }, data);
   } catch (e) {
     box.innerHTML = `<div class="err">${esc(e.message)}</div>`;
   }
 }
 
-function renderAnalysis(label, data) {
-  let html = `<div class="detail-title">${esc(label)}</div>`;
-  html += `<div class="detail-meta">${esc(SPORT_LABEL[sport])} • marché ${esc(data.market ?? "")}</div>`;
-  html += `<table><thead><tr><th>Marché</th><th class="num">Issues</th><th class="num">Marge</th><th>Fiable</th></tr></thead><tbody>`;
-  for (const m of data.markets) {
-    const margin = m.margin_pct === null ? "n/a" : `${m.margin_pct.toFixed(2)} %`;
-    const flag = m.reliable ? `<span class="ok">✅ oui</span>` : `<span class="warn">⚠️ non</span>`;
-    html += `<tr><td>${esc(m.market)}</td><td class="num">${m.outcomes}</td><td class="num">${margin}</td><td>${flag}</td></tr>`;
-  }
-  html += `</tbody></table>`;
+// Marge du bookmaker (en %) : sous 6 % les cotes sont avantageuses, au-delà de 12 % le bookmaker prend cher.
+const MARGIN_GOOD = 6;
+const MARGIN_HIGH = 12;
 
-  for (const m of data.markets.filter(x => x.reliable)) {
-    html += `<div class="sub-title">${esc(m.market)}</div><table><thead><tr><th>Issue</th><th class="num">Cote</th><th class="num">Probabilité implicite</th></tr></thead><tbody>`;
-    for (const s of m.selections) {
-      const pct = s.odds > 1 ? 100 / s.odds : 0;
-      const p = pct ? pct.toFixed(1) + " %" : "n/a";
-      html += `<tr><td>${esc(s.name)}<div class="bar"><div style="width:${Math.min(pct, 100)}%"></div></div></td><td class="num">${esc(s.odds)}</td><td class="num">${p}</td></tr>`;
-    }
-    html += `</tbody></table>`;
+function verdictFor(margin) {
+  if (margin === null || margin === undefined) return { cls: "neutral", short: "Non évaluable", text: "marge impossible à évaluer" };
+  if (margin < MARGIN_GOOD) return { cls: "good", short: "Cotes avantageuses", text: "cotes avantageuses, pari à considérer si vous aimez ce type de pari" };
+  if (margin <= MARGIN_HIGH) return { cls: "mid", short: "Cotes correctes", text: "cotes correctes, jouez avec prudence" };
+  return { cls: "bad", short: "Marge élevée", text: "marge élevée, le bookmaker prend cher : mieux vaut ne pas jouer ce marché" };
+}
+
+function marketLabel(name) {
+  return name.replace(" (t. rég)", "");
+}
+
+function renderAnalysis(match, data) {
+  const reliable = data.markets.filter(m => m.reliable && m.selections.length);
+  const others = data.markets.filter(m => !m.reliable);
+  const when = match.date ? new Date(match.date).toISOString().substring(0, 16).replace("T", " ") + " UTC" : "";
+
+  let html = `<div class="an-head">
+    <div class="an-title">${esc(match.name)}</div>
+    <div class="an-meta">${esc(match.competition || "")} • ${esc(when)} • ${esc(STATUS_LABEL[match.status] || "")}</div>
+  </div>`;
+
+  if (reliable.length) {
+    const best = reliable[0];
+    const v = verdictFor(best.margin_pct);
+    html += `<div class="an-summary ${v.cls}"><b>Conseil général :</b> ${esc(v.text)}.
+      <div class="an-sub">Marché le plus avantageux parmi les fiables : ${esc(marketLabel(best.market))} (marge ${best.margin_pct.toFixed(1)} %).</div></div>`;
+  } else {
+    html += `<div class="an-summary neutral">Aucun marché fiable pour ce match.</div>`;
   }
-  html += `<div class="legend">Probabilité implicite = 1 / cote. Une marge basse signale un bookmaker plus généreux sur ce marché ; seules les marges des marchés ✅ sont interprétables. Ce n'est pas une prédiction du résultat.</div>`;
+
+  for (const m of reliable) {
+    const v = verdictFor(m.margin_pct);
+    const total = m.selections.reduce((sum, s) => sum + (s.odds > 1 ? 1 / s.odds : 0), 0);
+    html += `<div class="an-card">
+      <div class="an-card-head">
+        <div class="an-market">${esc(marketLabel(m.market))}</div>
+        <span class="an-verdict ${v.cls}">${esc(v.short)}</span>
+      </div>
+      <div class="an-margin">Marge du bookmaker : ${m.margin_pct.toFixed(1)} % (ce que le bookmaker garde sur ce marché)</div>`;
+    for (const s of m.selections) {
+      const chance = s.odds > 1 && total ? ((1 / s.odds) / total) * 100 : 0;
+      html += `<div class="an-row">
+        <div class="an-line"><span class="an-out">${esc(s.name)}</span><span class="an-odds">cote ${esc(s.odds)}</span></div>
+        <div class="an-bar"><div style="width:${chance.toFixed(1)}%"></div></div>
+        <div class="an-chances"><span>Gagner : <b>${chance.toFixed(0)} %</b></span><span>Perdre : <b>${(100 - chance).toFixed(0)} %</b></span></div>
+      </div>`;
+    }
+    html += `</div>`;
+  }
+
+  if (others.length) {
+    html += `<details class="an-more">
+      <summary>Autres marchés (${others.length}) : non interprétables</summary>
+      <p>Sur ces marchés, beaucoup d'issues rares existent : la marge calculée n'a pas de sens et ne doit pas servir à décider.</p>
+      <ul>${others.map(m => `<li>${esc(marketLabel(m.market))} (${m.outcomes} issues)</li>`).join("")}</ul>
+    </details>`;
+  }
+
+  html += `<div class="legend">Comment lire : « Gagner » est la probabilité de l'issue selon les cotes, une fois la marge du bookmaker retirée. « Perdre » est son complément. Ce n'est pas une prédiction du résultat, et parier comporte un risque de perte.</div>`;
   $("analysis").innerHTML = html;
 }
 </script>
