@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -34,6 +35,7 @@ from .timing import IN_PLAY, PAST, UNKNOWN, UPCOMING, match_status
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
 app = FastAPI(title="BetclicAgent")
+logger = logging.getLogger(__name__)
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
@@ -380,6 +382,12 @@ async def engine_match(home: str = Query(min_length=2, max_length=80),
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except EngineError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except FileNotFoundError as exc:
+        logger.error("Données moteur absentes : %s", exc)
+        raise HTTPException(status_code=503, detail="Données historiques absentes : placez data/Matches.csv.") from exc
+    except Exception as exc:
+        logger.exception("Erreur moteur pour %s vs %s", home, away)
+        raise HTTPException(status_code=500, detail=f"Erreur interne du moteur ({type(exc).__name__}) : voir les logs serveur.") from exc
 
 
 @app.get("/api/engine/validation")

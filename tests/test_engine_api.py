@@ -68,3 +68,24 @@ def test_scan_endpoint_rejects_empty_fixtures():
 def test_validation_endpoint_404_without_report(monkeypatch):
     monkeypatch.setattr(api.validate, "load_report", lambda: None)
     assert TestClient(api.app).get("/api/engine/validation").status_code == 404
+
+
+def test_engine_match_unexpected_error_returns_explicit_detail(monkeypatch):
+    def boom(home, away, odds=None):
+        raise KeyError("corners")
+
+    monkeypatch.setattr(service, "predict", boom)
+    r = TestClient(api.app, raise_server_exceptions=False).get(
+        "/api/engine/match", params={"home": "Lyon", "away": "Lille"})
+    assert r.status_code == 500
+    assert "KeyError" in r.json()["detail"]
+
+
+def test_engine_match_missing_dataset_returns_503(monkeypatch):
+    def missing(home, away, odds=None):
+        raise FileNotFoundError("data/Matches.csv")
+
+    monkeypatch.setattr(service, "predict", missing)
+    r = TestClient(api.app).get("/api/engine/match", params={"home": "Lyon", "away": "Lille"})
+    assert r.status_code == 503
+    assert "Matches.csv" in r.json()["detail"]
