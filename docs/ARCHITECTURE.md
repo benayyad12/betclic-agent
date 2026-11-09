@@ -106,6 +106,17 @@ collecte plafonnée à 30 pages avait manqués.
 5. `print_report()` + `alert_opportunities()` (Telegram si configuré)
 6. `REQUEST_DELAY_S` entre chaque match (politesse réseau)
 
+## Backtest de référence (`historical.py`, `backtest.py`)
+
+- Données : `xgabora/Club-Football-Match-Data` (MIT), 1X2 pré-match + Elo ClubElo.
+  Téléchargées dans `data/` (ignoré par git). Pas de xG, pas de cotes Betclic.
+- Modèles : `market` (cotes dé-marginées) et `elo` (logistique Elo, nul fixe à 27 %).
+- Lancement : `python -m betclic_agent.backtest --division E0`
+- Résultat Premier League 2019+ (2 858 matchs) : le modèle Elo est moins bon que le
+  marché (Brier 0.594 contre 0.572). Sa règle de valeur perd 5.7 % par pari
+  (IC 95 % [−13.4 %, +1.7 %]). Aucune rentabilité n'est démontrée.
+- Le ROI est optimiste : les cotes de référence ne sont pas celles de Betclic au moment du pari.
+
 ## Extensions prévues
 
 - **Comparaison multi-bookmakers** : brancher les cotes Broker/OddsPapi pour détecter
