@@ -19,7 +19,7 @@ from pathlib import Path
 
 from .client_ci import MAX_PAGES, BetclicMarketClient
 from .config import Settings
-from .markets import analyze_markets, find_opportunities
+from .markets import analyze_markets, find_low_margin_markets
 from .notifier import alert_opportunities, print_report
 from .timing import IN_PLAY, PAST, UNKNOWN, UPCOMING, local_time, match_status
 
@@ -139,7 +139,7 @@ def cmd_scan(client: BetclicMarketClient, args) -> int:
             print(f"  [{idx}/{len(matches)}] {match['name']} — erreur: {exc}")
             continue
         analyzed = analyze_markets(markets)
-        for item in find_opportunities(analyzed, settings.min_margin_pct, settings.max_margin_pct):
+        for item in find_low_margin_markets(analyzed, settings.min_margin_pct, settings.max_margin_pct):
             opportunities.append({**item, "match": match["name"]})
         print(f"  [{idx}/{len(matches)}] {match['name']} — {len(analyzed)} marchés")
         time.sleep(settings.request_delay_s)

@@ -15,7 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from betclic_agent.client_ci import BetclicMarketClient  # noqa: E402
 from betclic_agent.config import Settings  # noqa: E402
-from betclic_agent.markets import analyze_markets, find_opportunities  # noqa: E402
+from betclic_agent.markets import analyze_markets, find_low_margin_markets  # noqa: E402
 
 
 def main() -> int:
@@ -54,7 +54,7 @@ def main() -> int:
         print(f"   ⚠️ {item['market']} : marge {margin} — non interprétable (issues non exhaustives)")
 
     print("\n4. Détection (seuils configurés, marchés fiables uniquement)")
-    found = find_opportunities(analyzed, settings.min_margin_pct, settings.max_margin_pct)
+    found = find_low_margin_markets(analyzed, settings.min_margin_pct, settings.max_margin_pct)
     print(f"   ✅ {len(found)} marché(s) dans la fourchette {settings.min_margin_pct}-{settings.max_margin_pct}%")
 
     print("\n✅ Smoke test OK — la chaîne collecte → analyse → détection fonctionne.")

@@ -90,15 +90,17 @@ def analyze_markets(markets: dict[str, list[dict]]) -> list[dict]:
     )
 
 
-def find_opportunities(
+def find_low_margin_markets(
     analyzed: list[dict],
     min_margin_pct: float = 6.0,
     max_margin_pct: float = 12.0,
 ) -> list[dict]:
-    """Repère les marchés FIABLES dont la marge sort de la fourchette habituelle.
+    """Filtre les marchés FIABLES dont la marge est comprise entre min et max.
 
-    - marge < min_margin_pct  → bookmaker généreux (valeur potentielle)
-    - marge > max_margin_pct  → marché peu intéressant (à ignorer)
+    Ce filtre est une présélection pour étude, PAS une détection de Value Bet :
+    une marge basse indique seulement un bookmaker plus généreux sur ce marché.
+    Elle ne prouve ni une espérance positive ni une erreur de cote. Le calcul de
+    l'EV exige une probabilité modèle, absente de ce module.
 
     Les marchés non exhaustifs sont ignorés : leur marge n'est pas interprétable.
     """
@@ -109,3 +111,7 @@ def find_opportunities(
         and m["margin_pct"] is not None
         and min_margin_pct <= m["margin_pct"] <= max_margin_pct
     ]
+
+
+# Alias de compatibilité : le nom précédent est conservé pour ne rien casser.
+find_opportunities = find_low_margin_markets

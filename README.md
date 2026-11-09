@@ -88,7 +88,7 @@ Ces deux scripts travaillent sur le JSON déjà collecté (aucune requête rése
 |---|---|---|
 | `BETCLIC_MARKET` | `CI` | Marché ciblé : `CI`, `FR`, `SN` |
 | `REQUEST_DELAY_S` | `1.5` | Délai entre requêtes (usage raisonnable) |
-| `MIN_MARGIN_PCT` | `6.0` | Marge basse → bookmaker généreux |
+| `MIN_MARGIN_PCT` | `6.0` | Borne basse de la présélection (marge basse, pas un signal de valeur) |
 | `MAX_MARGIN_PCT` | `12.0` | Marge haute → marché ignoré |
 | `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` | — | Alertes Telegram (optionnel) |
 
@@ -143,7 +143,7 @@ jeu de 3 h. Conséquence assumée : un match reporté est classé `in_play`/`pas
 
 - Dépend d'un backend **non officiel** : il peut changer sans préavis (le projet
   [`TapsHTS/betclic-api`](https://github.com/TapsHTS/betclic-api) maintient le protocole)
-- Une marge basse est un **signal**, pas une garantie de gain
+- Une marge basse est une **présélection**, pas une Value Bet : elle n'indique ni une espérance positive ni une erreur de cote
 - Pas de comparaison multi-bookmakers intégrée (à brancher avec Broker)
 
 ## Licence et crédits

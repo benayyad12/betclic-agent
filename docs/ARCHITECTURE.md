@@ -104,7 +104,7 @@ collecte plafonnée à 30 pages avait manqués.
 1. `collect_matches(sport, limit)` → liste de matchs (id, nom, compétition, diffusion)
 2. Pour chaque match : `get_main_markets(id)` → `{marché: [sélections]}`
 3. `analyze_markets()` → marges + flag `reliable`
-4. `find_opportunities()` → marchés fiables dans la fourchette configurée
+4. `find_low_margin_markets()` → présélection des marchés fiables dans la fourchette de marge (pas une Value Bet)
 5. `print_report()` + `alert_opportunities()` (Telegram si configuré)
 6. `REQUEST_DELAY_S` entre chaque match (politesse réseau)
 

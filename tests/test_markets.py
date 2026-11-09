@@ -6,6 +6,7 @@ import pytest
 
 from betclic_agent.markets import (
     analyze_markets,
+    find_low_margin_markets,
     find_opportunities,
     implied_probability,
     is_exhaustive_market,
@@ -82,7 +83,7 @@ def test_analyze_markets_trie_et_marque_fiabilite():
     assert analyzed[0]["margin_pct"] <= analyzed[1]["margin_pct"]
 
 
-def test_find_opportunities_ignore_les_marches_non_fiables():
+def test_find_low_margin_markets_ignore_les_marches_non_fiables():
     analyzed = [
         {
             "market": "Résultat du match (t. rég)",
@@ -107,6 +108,7 @@ def test_find_opportunities_ignore_les_marches_non_fiables():
             "selections": [],
         },
     ]
-    found = find_opportunities(analyzed, min_margin_pct=6.0, max_margin_pct=12.0)
+    found = find_low_margin_markets(analyzed, min_margin_pct=6.0, max_margin_pct=12.0)
     assert len(found) == 1
     assert found[0]["market"] == "Résultat du match (t. rég)"
+    assert find_opportunities is find_low_margin_markets  # alias conservé
