@@ -35,7 +35,9 @@
 | `markets.py` | Calculer les probabilités implicites, les marges, et présélectionner les marchés à marge basse (`find_low_margin_markets`, alias `find_opportunities`) |
 | `devig.py` | Retirer la marge d'un marché : méthodes proportionnelle, puissance et Shin (somme = 1) |
 | `timing.py` | Estimer le statut temporel des matchs (le backend n'en fournit aucun de fiable) |
-| `notifier.py` | Présenter les résultats (console) et alerter (Telegram) |
+| `notifier.py` | Présenter les résultats (console) et alerter (Telegram) : HTML échappé, échecs journalisés, alertes dédoublonnées (`alerts_sent`) |
+| `staking.py` | Gestion de mise : flat, Kelly fractionné plafonné, simulation Monte Carlo du risque de ruine |
+| `backtest_engine/` | Métriques de backtest (Brier, ROI, CLV, bootstrap…) et walk-forward sans fuite |
 | `db/` | Persistance SQLAlchemy 2 : matchs, marchés, historique des cotes en ajout seul, runs |
 | `alembic/` | Migrations du schéma (`alembic upgrade head`, URL lue depuis `DATABASE_URL`) |
 | `main.py` | Exposer le tout en ligne de commande |
@@ -109,6 +111,13 @@ collecte plafonnée à 30 pages avait manqués.
 5. `print_report()` + `alert_opportunities()` (Telegram si configuré)
 6. `REQUEST_DELAY_S` entre chaque match (politesse réseau)
 
+Le pré-chargement web (`api.py`, `_prefetch_markets`) suit la même règle : un seul
+match à la fois, espacé de `REQUEST_DELAY_S`. Il n'y a jamais deux requêtes Betclic en vol
+depuis le pré-chargement (test `test_prefetch_never_runs_two_requests_at_once`).
+
+Les pages de liste du jour sont encore récupérées en parallèle (`MAX_PAGES`) : c'est un
+écart à la règle « une requête à la fois », à arbitrer.
+
 ## Backtest de référence (`historical.py`, `backtest.py`)
 
 - Données : `xgabora/Club-Football-Match-Data` (MIT), 1X2 pré-match + Elo ClubElo.
@@ -127,6 +136,20 @@ collecte plafonnée à 30 pages avait manqués.
   Une métrique sans donnée renvoie `None`, jamais une valeur inventée.
 - `walkforward.py` : découpage chronologique ; l'entraînement précède strictement le test.
 - Chaque métrique est testée sur un cas synthétique à résultat connu (`tests/test_backtest_engine.py`).
+
+## Gestion de mise (`staking.py`)
+
+- Flat : fraction fixe de la bankroll.
+- Kelly : `(p × cote − 1) / (cote − 1)`, nul si l'espérance est négative. Fraction (ex. 0.25) et plafond par pari.
+- Monte Carlo : probabilité de passer sous un seuil de bankroll. Suppose que `p` est juste ;
+  si le modèle surestime `p`, le risque réel est plus élevé.
+- Tests : `tests/test_staking.py`.
+
+## Alertes (`notifier.py`)
+
+- Les valeurs des bookmakers sont échappées (`html.escape`) avant l'envoi en mode HTML.
+- Un échec Telegram est journalisé sans le token ; il n'est pas avalé silencieusement.
+- Une alerte envoyée est enregistrée dans `alerts_sent` (clé = match, marché, marge) et n'est pas renvoyée.
 
 
 ## Extensions prévues

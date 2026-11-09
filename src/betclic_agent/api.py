@@ -52,7 +52,6 @@ MATCH_CACHE_TTL_S = 30
 # Cache des matchs complets par (sport, marché) ; seuls les résultats sans page en échec sont mis en cache.
 _cache: dict[tuple[str, str], tuple[float, dict]] = {}
 _match_cache: dict[tuple[int, str], tuple[float, dict]] = {}
-PREFETCH_CONCURRENCY = 6
 PREFETCH_LIMIT = 40
 _background: set[asyncio.Task] = set()
 
@@ -224,15 +223,13 @@ async def _markets_for(match_id: int, name: str) -> dict:
 
 
 async def _prefetch_markets(match_ids: list[int], name: str) -> None:
-    """Charge en arrière-plan les marchés des matchs affichés, pour que le clic soit instantané.
-    Concurrence bornée et erreurs ignorées : c'est une optimisation, pas une obligation."""
-    sem = asyncio.Semaphore(PREFETCH_CONCURRENCY)
-
-    async def one(match_id: int) -> None:
-        async with sem:
-            try:
-                await _markets_for(match_id, name)
-            except Exception:
-                pass
-
-    await asyncio.gather(*(one(m) for m in match_ids))
+    """Charge en arrière-plan les marchés des matchs affichés, un par un, espacés de
+    REQUEST_DELAY_S : une seule requête à la fois vers Betclic. Les erreurs sont ignorées
+    (optimisation, pas obligation)."""
+    delay = Settings().request_delay_s
+    for match_id in match_ids:
+        try:
+            await _markets_for(match_id, name)
+        except Exception:
+            pass
+        await asyncio.sleep(delay)

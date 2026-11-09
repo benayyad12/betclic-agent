@@ -59,3 +59,28 @@ def test_prefetch_fills_cache_so_click_is_instant(monkeypatch):
     assert FakeClient.calls == 3
     asyncio.run(api._markets_for(2, "CI"))
     assert FakeClient.calls == 3
+
+
+def test_prefetch_never_runs_two_requests_at_once(monkeypatch):
+    import asyncio
+    import threading
+    import time
+
+    state = {"inflight": 0, "max": 0}
+    lock = threading.Lock()
+
+    class SlowClient:
+        def get_main_markets(self, match_id):
+            with lock:
+                state["inflight"] += 1
+                state["max"] = max(state["max"], state["inflight"])
+            time.sleep(0.02)
+            with lock:
+                state["inflight"] -= 1
+            return {"x": match_id}
+
+    api._match_cache.clear()
+    monkeypatch.setenv("REQUEST_DELAY_S", "0")
+    monkeypatch.setattr(api, "_client", lambda market: SlowClient())
+    asyncio.run(api._prefetch_markets([11, 12, 13, 14], "CI"))
+    assert state["max"] == 1

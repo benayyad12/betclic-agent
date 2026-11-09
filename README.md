@@ -101,8 +101,9 @@ src/betclic_agent/
 ├── markets.py      Probabilités implicites, marges, présélection par marge
 ├── devig.py        Dé-margement : proportionnel, puissance, Shin
 ├── backtest_engine/ Métriques de backtest et walk-forward
+├── staking.py      Flat, Kelly fractionné plafonné, Monte Carlo de ruine
 ├── timing.py       Statut temporel estimé (le backend n'en fournit aucun)
-├── notifier.py     Rapport console + alertes Telegram
+├── notifier.py     Rapport console + alertes Telegram (dédoublonnées)
 └── main.py         CLI (sports, matches, today, analyze, scan)
 ```
 
