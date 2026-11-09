@@ -143,3 +143,46 @@ def predict(home_name: str, away_name: str, odds: dict | None = None) -> dict:
         "risks": _risks(state, home, away),
         "method": "Dixon-Coles (Poisson bivarié corrigé), données antérieures à aujourd'hui uniquement",
     }
+
+
+QUALITY_RANK = {"faible": 0, "moyenne": 1, "élevée": 2}
+
+
+def scan(fixtures: list[dict], min_quality: str = "faible", top: int = 10) -> dict:
+    """Parcourt une liste de rencontres {home, away, odds?} et ne retourne que des opportunités justifiées.
+
+    Une sélection n'est « value » que si la borne basse de l'intervalle d'EV est positive.
+    Rien n'est forcé : une liste vide est un résultat valide.
+    """
+    floor = QUALITY_RANK.get(min_quality, 0)
+    value_bets, likely, insufficient, no_edge = [], [], [], []
+    for fx in fixtures:
+        label = f"{fx.get('home', '')} - {fx.get('away', '')}"
+        try:
+            pred = predict(fx["home"], fx["away"], fx.get("odds"))
+        except UnknownTeam as exc:
+            insufficient.append({"match": label, "reason": f"équipe inconnue du moteur : {exc}"})
+            continue
+        except (EngineError, KeyError) as exc:
+            insufficient.append({"match": label, "reason": str(exc) or "données insuffisantes"})
+            continue
+        if QUALITY_RANK[pred["data_quality"]] < floor:
+            insufficient.append({"match": label, "reason": f"qualité {pred['data_quality']} sous le minimum"})
+            continue
+        for sel in pred["value"]:
+            entry = {"match": f"{pred['home']} - {pred['away']}", **sel}
+            if sel["ev_interval"][0] > 0:
+                value_bets.append(entry)
+            else:
+                no_edge.append(entry)
+            if sel["model_probability"] >= 0.5:
+                likely.append(entry)
+    value_bets.sort(key=lambda e: e["rank_key"], reverse=True)
+    likely.sort(key=lambda e: e["model_probability"], reverse=True)
+    return {
+        "best_value_bets": value_bets[:top],
+        "highest_probability": likely[:top],
+        "insufficient_data": insufficient,
+        "no_statistical_edge": len(no_edge),
+        "scanned": len(fixtures),
+    }

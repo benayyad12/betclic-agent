@@ -131,6 +131,16 @@
     .teams { white-space: normal; }
     .diffusion { white-space: nowrap; }
   }
+  .an-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+  .an-tab { background: var(--surface-2); color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 4px 10px; font-size: 12px; cursor: pointer; }
+  .an-tab.active { color: var(--text); border-color: var(--accent, #4f8cff); }
+  .an-table { width: 100%; border-collapse: collapse; font-size: 12px; margin: 8px 0; }
+  .an-table th, .an-table td { text-align: left; padding: 5px 6px; border-bottom: 1px solid var(--line); }
+  .an-table th { color: var(--muted); font-weight: 500; }
+  .na { color: var(--muted); font-style: italic; }
+  .an-tiles { display: grid; gap: 8px; margin: 10px 0; }
+  .an-tile { background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius); padding: 8px; text-align: center; font-size: 12px; }
+  .an-tile b { display: block; font-size: 18px; }
 </style>
 </head>
 <body>
@@ -139,6 +149,7 @@
     <div class="brand"><i class="logo">B</i><span class="brand-text">BETCLIC <span>AI</span></span></div>
     <input class="search" type="search" id="search" placeholder="Rechercher une équipe ou un tournoi…" aria-label="Rechercher">
     <div class="top-controls">
+      <a href="/engine" class="btn-link" style="align-self:center;color:var(--muted);font-size:12px">Centre du jour →</a>
       <select id="market" aria-label="Marché">
         <option value="">Marché : défaut</option>
         <option value="CI">CI</option>
@@ -354,7 +365,10 @@ async function analyzeMatch(id, label, { silent = false } = {}) {
     if (silent && sig === state.analysisSig) return;
     state.analysisSig = sig;
     state.analysisAt = new Date().toTimeString().substring(0, 8);
-    renderAnalysis(state.matches.find(m => String(m.id) === String(id)) || { name: label }, data);
+    const match = state.matches.find(m => String(m.id) === String(id)) || { name: label };
+    const engine = await loadEngine(match, data);
+    if (seq !== state.analysisSeq) return;
+    renderAnalysis(match, data, engine);
   } catch (e) {
     if (seq !== state.analysisSeq) return;
     if (!silent) box.innerHTML = `<div class="err">${esc(e.message)}</div>`;
@@ -383,7 +397,7 @@ function marketLabel(name) {
   return name.replace(" (t. rég)", "");
 }
 
-function renderAnalysis(match, data) {
+function renderOverviewHtml(match, data) {
   const reliable = data.markets.filter(m => m.reliable && m.selections.length);
   const others = data.markets.filter(m => !m.reliable);
   const when = match.date ? new Date(match.date).toISOString().substring(0, 16).replace("T", " ") + " UTC" : "";
@@ -439,8 +453,189 @@ function renderAnalysis(match, data) {
   }
 
   html += `<div class="legend">Comment lire : « Gagner » est la probabilité de l'issue selon les cotes, une fois la marge du bookmaker retirée. « Perdre » est son complément. Ce n'est pas une prédiction du résultat, et parier comporte un risque de perte.</div>`;
-  $("analysis").innerHTML = html;
+  return html;
 }
+
+// Onglets d'analyse : chaque onglet est rendu depuis la réponse du moteur (/api/engine/match).
+const AN_TABS = [
+  ["overview", "Vue d'ensemble"], ["match", "Prédiction"], ["goals", "Buts & score"],
+  ["corners", "Corners & cartons"], ["half", "Mi-temps"], ["odds", "Comparaison cotes"],
+  ["value", "Value bets"], ["evidence", "Preuves"],
+];
+const NA = `<span class="na">non disponible</span>`;
+const pct = (x) => (x === null || x === undefined) ? NA : `${(x * 100).toFixed(1)} %`;
+const num = (x, d = 2) => (x === null || x === undefined) ? NA : Number(x).toFixed(d);
+const fairOdds = (p) => (p > 0 ? (1 / p).toFixed(2) : NA);
+const missingEngine = (engine) => `<div class="msg">Moteur indisponible pour ce match${engine && engine.error ? " : " + esc(engine.error) : ""}.</div>`;
+
+function splitMatchName(name) {
+  for (const sep of [" - ", " – ", " vs ", " v "]) {
+    const i = name.indexOf(sep);
+    if (i > 0) return [name.slice(0, i).trim(), name.slice(i + sep.length).trim()];
+  }
+  return null;
+}
+
+// Cotes 1X2 Betclic transmises au moteur uniquement si l'ordre domicile/nul/extérieur est vérifiable.
+async function loadEngine(match, data) {
+  const parts = splitMatchName(match.name || "");
+  if (!parts) return { error: "nom de match non reconnu" };
+  const params = new URLSearchParams({ home: parts[0], away: parts[1] });
+  const main = data.markets.find(m => m.reliable && m.selections.length === 3 && m.market.startsWith("Résultat du match"));
+  if (main && /nul|draw/i.test(main.selections[1].name)) {
+    params.set("odds_home", main.selections[0].odds);
+    params.set("odds_draw", main.selections[1].odds);
+    params.set("odds_away", main.selections[2].odds);
+  }
+  try {
+    return await getJson(`/api/engine/match?${params}`);
+  } catch (e) {
+    return { error: e.message };
+  }
+}
+
+function renderAnalysis(match, data, engine) {
+  state.an = { match, data, engine };
+  const nav = AN_TABS.map(([k, l]) => `<button type="button" class="an-tab" data-tab="${k}">${esc(l)}</button>`).join("");
+  $("analysis").innerHTML = `<div class="an-tabs" role="tablist">${nav}</div><div id="an-body"></div>`;
+  $("analysis").querySelectorAll(".an-tab").forEach(b => b.addEventListener("click", () => showAnTab(b.dataset.tab)));
+  showAnTab(state.anTab || "overview");
+}
+
+function showAnTab(key) {
+  state.anTab = key;
+  const { match, data, engine } = state.an;
+  $("analysis").querySelectorAll(".an-tab").forEach(b => b.classList.toggle("active", b.dataset.tab === key));
+  if (key === "evidence" && state.validation === undefined && !state.validationFetching) {
+    state.validationFetching = true;
+    getJson("/api/engine/validation")
+      .then(v => { state.validation = v; })
+      .catch(() => { state.validation = null; })
+      .finally(() => {
+        state.validationFetching = false;
+        if (state.anTab === "evidence") showAnTab("evidence");
+      });
+  }
+  $("an-body").innerHTML = AN_RENDER[key](match, data, engine);
+}
+
+const AN_RENDER = {
+  overview: (match, data) => renderOverviewHtml(match, data),
+
+  match: (match, data, engine) => {
+    if (!engine || engine.error) return missingEngine(engine);
+    const r = engine.markets.match_result, dc = engine.markets.double_chance, dnb = engine.markets.draw_no_bet;
+    const tiles = [["Domicile", r.home], ["Nul", r.draw], ["Extérieur", r.away]]
+      .map(([l, p]) => `<div class="an-tile">${l}<b>${pct(p)}</b>cote juste ${fairOdds(p)}</div>`).join("");
+    return `<div class="an-summary neutral">Probabilités du modèle Dixon-Coles. Données arrêtées au ${esc(engine.data_last_match)}, qualité ${esc(engine.data_quality)}.</div>
+      <div class="an-tiles" style="grid-template-columns:repeat(3,1fr)">${tiles}</div>
+      <table class="an-table"><tr><th>Marché</th><th>Probabilité</th><th>Cote juste</th></tr>
+        <tr><td>Double chance 1X</td><td>${pct(dc["1X"])}</td><td>${fairOdds(dc["1X"])}</td></tr>
+        <tr><td>Double chance X2</td><td>${pct(dc["X2"])}</td><td>${fairOdds(dc["X2"])}</td></tr>
+        <tr><td>Double chance 12</td><td>${pct(dc["12"])}</td><td>${fairOdds(dc["12"])}</td></tr>
+        <tr><td>Remboursé si nul : domicile</td><td>${pct(dnb.home)}</td><td>${fairOdds(dnb.home)}</td></tr>
+        <tr><td>Remboursé si nul : extérieur</td><td>${pct(dnb.away)}</td><td>${fairOdds(dnb.away)}</td></tr>
+      </table>
+      <div class="legend">Buts attendus : ${num(engine.expected_goals.home)} domicile, ${num(engine.expected_goals.away)} extérieur.</div>`;
+  },
+
+  goals: (match, data, engine) => {
+    if (!engine || engine.error) return missingEngine(engine);
+    const ou = engine.markets.over_under, tg = engine.markets.team_goals;
+    const lines = Object.keys(ou).sort((a, b) => a - b)
+      .map(l => `<tr><td>Plus de ${l}</td><td>${pct(ou[l].over)}</td><td>${fairOdds(ou[l].over)}</td></tr>
+                 <tr><td>Moins de ${l}</td><td>${pct(ou[l].under)}</td><td>${fairOdds(ou[l].under)}</td></tr>`).join("");
+    const scores = engine.markets.top_scores.slice(0, 5)
+      .map(s => `<tr><td>${s.home} - ${s.away}</td><td>${pct(s.p)}</td><td>${fairOdds(s.p)}</td></tr>`).join("");
+    return `<table class="an-table"><tr><th>Buts</th><th>Probabilité</th><th>Cote juste</th></tr>${lines}</table>
+      <table class="an-table"><tr><th>BTTS</th><th>Probabilité</th><th>Cote juste</th></tr>
+        <tr><td>Les deux marquent : oui</td><td>${pct(engine.markets.btts.yes)}</td><td>${fairOdds(engine.markets.btts.yes)}</td></tr>
+        <tr><td>Les deux marquent : non</td><td>${pct(engine.markets.btts.no)}</td><td>${fairOdds(engine.markets.btts.no)}</td></tr>
+      </table>
+      <table class="an-table"><tr><th>Équipe</th><th>Marque</th><th>Clean sheet</th><th>Buts attendus</th></tr>
+        <tr><td>Domicile</td><td>${pct(tg.home.scoring)}</td><td>${pct(tg.home.clean_sheet)}</td><td>${num(tg.home.expected)}</td></tr>
+        <tr><td>Extérieur</td><td>${pct(tg.away.scoring)}</td><td>${pct(tg.away.clean_sheet)}</td><td>${num(tg.away.expected)}</td></tr>
+      </table>
+      <table class="an-table"><tr><th>Top 5 scores</th><th>Probabilité</th><th>Cote juste</th></tr>${scores}</table>`;
+  },
+
+  corners: (match, data, engine) => {
+    if (!engine || engine.error) return missingEngine(engine);
+    const block = (label, s, lines) => {
+      if (!s) return `<div class="an-card"><b>${label}</b><div class="na">historique insuffisant : estimation non fournie</div></div>`;
+      const ou = Object.keys(s.over_under).sort((a, b) => a - b)
+        .map(l => `<tr><td>Plus de ${l}</td><td>${pct(s.over_under[l].over)}</td><td>${fairOdds(s.over_under[l].over)}</td></tr>`).join("");
+      return `<div class="an-card"><b>${label}</b>
+        <div class="an-margin">Attendus : domicile ${num(s.expected.home)} • extérieur ${num(s.expected.away)} • total ${num(s.expected.total)}</div>
+        <table class="an-table"><tr><th>Ligne</th><th>Probabilité</th><th>Cote juste</th></tr>${ou}</table></div>`;
+    };
+    return block("Corners", engine.secondary.corners) + block("Cartons", engine.secondary.cards);
+  },
+
+  half: (match, data, engine) => {
+    if (!engine || engine.error) return missingEngine(engine);
+    const ht = engine.markets.half_time, ou = ht.over_under;
+    const res = `<table class="an-table"><tr><th>Mi-temps</th><th>Probabilité</th><th>Cote juste</th></tr>
+      <tr><td>Domicile</td><td>${pct(ht.result.home)}</td><td>${fairOdds(ht.result.home)}</td></tr>
+      <tr><td>Nul</td><td>${pct(ht.result.draw)}</td><td>${fairOdds(ht.result.draw)}</td></tr>
+      <tr><td>Extérieur</td><td>${pct(ht.result.away)}</td><td>${fairOdds(ht.result.away)}</td></tr></table>`;
+    const lines = ["0.5", "1.5"].map(l => `<tr><td>Plus de ${l}</td><td>${pct(ou[l].over)}</td><td>${fairOdds(ou[l].over)}</td></tr>`).join("");
+    return `${res}<table class="an-table"><tr><th>Buts 1re mi-temps</th><th>Probabilité</th><th>Cote juste</th></tr>${lines}</table>
+      <div class="legend">Approximation : ${esc(ht.method)}.</div>
+      <div class="an-summary neutral">Premier buteur : ${NA}. Les données de timing des buts ne sont pas disponibles.</div>`;
+  },
+
+  odds: (match, data) => {
+    const rows = data.markets.filter(m => m.reliable && m.selections.length).map(m => {
+      const total = m.selections.reduce((s, x) => s + (x.odds > 1 ? 1 / x.odds : 0), 0);
+      return m.selections.map(s => {
+        const raw = s.odds > 1 ? 1 / s.odds : null;
+        const adj = raw && total ? raw / total : null;
+        return `<tr><td>${esc(marketLabel(m.market))}</td><td>${esc(s.name)}</td><td>${esc(s.odds)}</td>
+          <td>${pct(raw)}</td><td>${pct(adj)}</td><td>${m.margin_pct.toFixed(1)} %</td></tr>`;
+      }).join("");
+    }).join("");
+    if (!rows) return `<div class="msg">Aucune cote fiable pour ce match.</div>`;
+    return `<table class="an-table"><tr><th>Marché</th><th>Sélection</th><th>Cote</th><th>Implicite brute</th><th>Sans marge</th><th>Marge</th></tr>${rows}</table>
+      <div class="legend">« Sans marge » retire la marge du bookmaker. Ce sont des probabilités du marché, pas du modèle.</div>`;
+  },
+
+  value: (match, data, engine) => {
+    if (!engine || engine.error) return missingEngine(engine);
+    if (!engine.value.length) return `<div class="msg">Cotes 1X2 non disponibles : aucun value bet calculable.</div>`;
+    const rows = engine.value.map(v => {
+      const justified = v.ev_interval[0] > 0;
+      return `<tr><td>${esc(v.label)}</td><td>${esc(v.betclic_odds)}</td><td>${pct(v.implied_probability)}</td>
+        <td>${pct(v.model_probability)}</td><td>${num(v.fair_odds)}</td>
+        <td>${num(v.expected_value, 3)}<br><span class="na">[${num(v.ev_interval[0], 3)} ; ${num(v.ev_interval[1], 3)}]</span></td>
+        <td>${num(v.confidence, 2)}</td><td>${esc(v.data_quality)}</td>
+        <td>${justified ? "avantage justifié" : "pas d'avantage démontré"}</td></tr>`;
+    }).join("");
+    return `<table class="an-table"><tr><th>Sélection</th><th>Cote</th><th>Implicite</th><th>Modèle</th><th>Cote juste</th><th>EV [IC]</th><th>Confiance</th><th>Qualité</th><th>Verdict</th></tr>${rows}</table>
+      <div class="legend">EV = probabilité × cote − 1. Un avantage n'est retenu que si la borne basse de l'intervalle est positive. La confiance mesure la fiabilité de l'estimation, pas la probabilité de gagner.</div>`;
+  },
+
+  evidence: (match, data, engine) => {
+    const risks = engine && !engine.error
+      ? `<ul>${engine.risks.map(r => `<li>${esc(r)}</li>`).join("")}</ul><div class="legend">${esc(engine.method)} • rho ${num(engine.rho, 3)}</div>`
+      : missingEngine(engine);
+    let val;
+    if (state.validation === undefined) val = `<div class="msg">Chargement du rapport de validation…</div>`;
+    else if (state.validation === null) val = `<div class="msg">Rapport absent : lancez <code>python scripts/validate_engine.py</code>.</div>`;
+    else {
+      const s = state.validation.summary, b = s.bets;
+      const ci = b.roi_ci95 ? `[${pct(b.roi_ci95[0])} ; ${pct(b.roi_ci95[1])}]` : NA;
+      val = `<table class="an-table"><tr><th>Walk-forward hors échantillon</th><th>Valeur</th></tr>
+        <tr><td>Paris simulés</td><td>${b.count}</td></tr>
+        <tr><td>ROI</td><td>${pct(b.roi)}</td></tr>
+        <tr><td>IC 95 % du ROI</td><td>${ci}</td></tr>
+        <tr><td>Drawdown max (unités)</td><td>${num(b.max_drawdown_units, 1)}</td></tr>
+        <tr><td>CLV</td><td>${s.clv === null ? NA : esc(s.clv)}</td></tr></table>
+        <div class="an-summary ${b.roi_ci95 && b.roi_ci95[0] > 0 ? "mid" : "bad"}">${esc(s.profitability_claim)}</div>`;
+    }
+    return `<div class="an-card"><b>Facteurs de risque</b>${risks}</div><div class="an-card"><b>Validation du modèle</b>${val}</div>`;
+  },
+};
 
 // Ticker : « mis à jour il y a Xs » chaque seconde, sans toucher à la liste.
 function tickAge() {

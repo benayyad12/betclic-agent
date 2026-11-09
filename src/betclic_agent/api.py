@@ -22,6 +22,11 @@ from fastapi.staticfiles import StaticFiles
 
 from .client_ci import MAX_PAGES, PAGE_SIZE, BetclicMarketClient
 from .config import Settings
+from pydantic import BaseModel, Field
+
+from .engine import service as engine_service
+from .engine import validate
+from .engine.errors import EngineError, UnknownTeam
 from .markets import analyze_markets
 from . import soccergpt
 from .timing import IN_PLAY, PAST, UNKNOWN, UPCOMING, match_status
@@ -30,6 +35,23 @@ STATIC_DIR = Path(__file__).resolve().parent / "static"
 
 app = FastAPI(title="BetclicAgent")
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+
+class ScanFixture(BaseModel):
+    home: str = Field(min_length=2, max_length=80)
+    away: str = Field(min_length=2, max_length=80)
+    odds: dict[str, float] | None = None
+
+
+class ScanRequest(BaseModel):
+    fixtures: list[ScanFixture] = Field(min_length=1, max_length=200)
+    min_quality: Literal["faible", "moyenne", "élevée"] = "faible"
+    top: int = Field(default=10, ge=1, le=50)
+
+
+@app.get("/engine", include_in_schema=False)
+def engine_page() -> FileResponse:
+    return FileResponse(STATIC_DIR / "engine.html")
 
 Market = Literal["CI", "FR", "SN"]
 
@@ -340,6 +362,40 @@ async def analyze(match_id: int, market: Market | None = None) -> dict:
         "market": name,
         "markets": analyze_markets(markets),
     }
+
+
+@app.get("/api/engine/match")
+async def engine_match(home: str = Query(min_length=2, max_length=80),
+                       away: str = Query(min_length=2, max_length=80),
+                       odds_home: float | None = Query(None, gt=1, lt=1000),
+                       odds_draw: float | None = Query(None, gt=1, lt=1000),
+                       odds_away: float | None = Query(None, gt=1, lt=1000)) -> dict:
+    """Prédictions du moteur Dixon-Coles pour un match, avec value bets si les cotes 1X2 sont fournies."""
+    odds = None
+    if odds_home and odds_draw and odds_away:
+        odds = {"home": odds_home, "draw": odds_draw, "away": odds_away}
+    try:
+        return await asyncio.to_thread(engine_service.predict, home, away, odds)
+    except UnknownTeam as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except EngineError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/api/engine/validation")
+def engine_validation() -> dict:
+    """Dernier rapport de validation walk-forward (hors échantillon). Lancer scripts/validate_engine.py pour le générer."""
+    report = validate.load_report()
+    if report is None:
+        raise HTTPException(status_code=404, detail="Rapport absent : lancez scripts/validate_engine.py.")
+    return report
+
+
+@app.post("/api/engine/scan")
+async def engine_scan(payload: ScanRequest) -> dict:
+    """Daily Center : scanne une liste de rencontres sans forcer de recommandation."""
+    fixtures = [f.model_dump() for f in payload.fixtures]
+    return await asyncio.to_thread(engine_service.scan, fixtures, payload.min_quality, payload.top)
 
 
 async def _markets_for(match_id: int, name: str) -> dict:

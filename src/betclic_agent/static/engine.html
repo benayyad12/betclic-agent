@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BetclicAgent — Centre de prédiction du jour</title>
+<style>
+  :root { --bg: #0b0f1a; --surface: #141a2a; --surface-2: #1b2338; --line: #2a3350; --text: #e8ecf5; --muted: #8b95b0; --good: #2fbf71; --bad: #e25555; --radius: 10px; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.45 system-ui, sans-serif; background: var(--bg); color: var(--text); }
+  header { padding: 14px 20px; border-bottom: 1px solid var(--line); display: flex; gap: 16px; align-items: center; }
+  header a { color: var(--muted); text-decoration: none; }
+  header h1 { font-size: 16px; margin: 0; }
+  main { max-width: 1100px; margin: 0 auto; padding: 20px; display: grid; gap: 16px; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; }
+  textarea { width: 100%; min-height: 160px; background: var(--surface-2); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 8px; font: 13px monospace; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 10px; }
+  button { background: var(--surface-2); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 7px 14px; cursor: pointer; }
+  button.primary { border-color: #4f8cff; }
+  select { background: var(--surface-2); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 6px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 6px; border-bottom: 1px solid var(--line); }
+  th { color: var(--muted); font-weight: 500; }
+  .muted { color: var(--muted); font-size: 12px; }
+  .err { color: var(--bad); }
+  .na { color: var(--muted); font-style: italic; }
+  h2 { font-size: 15px; margin: 0 0 8px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Centre de prédiction du jour</h1>
+  <a href="/">← Matchs et cotes</a>
+</header>
+<main>
+  <section class="card">
+    <h2>Rencontres à scanner</h2>
+    <div class="muted">Une rencontre par ligne : <code>Domicile - Extérieur</code>, ou avec cotes 1X2 : <code>Domicile - Extérieur; 1.80; 3.60; 4.50</code>. Sans cotes, aucun value bet n'est calculé.</div>
+    <textarea id="fixtures" spellcheck="false" placeholder="Paris Saint-Germain - Marseille; 1.80; 3.60; 4.50&#10;Lyon - Lille"></textarea>
+    <div class="row">
+      <button id="load" type="button">Charger les matchs Betclic du jour</button>
+      <label class="muted">Qualité minimale
+        <select id="quality">
+          <option value="faible">faible</option>
+          <option value="moyenne" selected>moyenne</option>
+          <option value="élevée">élevée</option>
+        </select>
+      </label>
+      <button id="scan" class="primary" type="button">Scanner</button>
+    </div>
+    <div id="status" class="muted" style="margin-top:8px"></div>
+  </section>
+  <section class="card" id="results"><div class="muted">Aucun scan lancé. Le moteur ne force aucune recommandation.</div></section>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const pct = (x) => (x === null || x === undefined) ? "n/d" : `${(x * 100).toFixed(1)} %`;
+const num = (x, d = 2) => (x === null || x === undefined) ? "n/d" : Number(x).toFixed(d);
+
+function splitName(name) {
+  for (const sep of [" - ", " – ", " vs ", " v "]) {
+    const i = name.indexOf(sep);
+    if (i > 0) return [name.slice(0, i).trim(), name.slice(i + sep.length).trim()];
+  }
+  return null;
+}
+
+function parseFixtures(text) {
+  const out = [];
+  const bad = [];
+  for (const raw of text.split("\n")) {
+    const line = raw.trim();
+    if (!line) continue;
+    const [namePart, oddsPart] = line.split(";");
+    const teams = splitName(namePart);
+    if (!teams) { bad.push(line); continue; }
+    const fx = { home: teams[0], away: teams[1] };
+    if (oddsPart) {
+      const [h, d, a] = oddsPart.trim().split(/[\s,]+/);
+      const odds = { home: Number(h), draw: Number(d), away: Number(a) };
+      if (odds.home > 1 && odds.draw > 1 && odds.away > 1) fx.odds = odds;
+    }
+    out.push(fx);
+  }
+  return { out, bad };
+}
+
+async function loadToday() {
+  $("status").textContent = "Chargement des matchs Betclic…";
+  try {
+    const r = await fetch("/api/today/football");
+    if (!r.ok) throw new Error((await r.json()).detail || r.statusText);
+    const data = await r.json();
+    const lines = data.matches.map(m => m.name).filter(n => splitName(n));
+    $("fixtures").value = lines.join("\n");
+    $("status").textContent = `${lines.length} rencontre(s) chargée(s), sans cotes 1X2.`;
+  } catch (e) {
+    $("status").innerHTML = `<span class="err">Betclic indisponible : ${esc(e.message)}. Saisissez les rencontres à la main.</span>`;
+  }
+}
+
+function table(headers, rows) {
+  return `<table><tr>${headers.map(h => `<th>${h}</th>`).join("")}</tr>${rows.join("")}</table>`;
+}
+
+function render(res) {
+  const valueRows = res.best_value_bets.map(v => `<tr><td>${esc(v.match)}</td><td>${esc(v.label)}</td>
+    <td>${esc(v.betclic_odds)}</td><td>${pct(v.model_probability)}</td><td>${num(v.fair_odds)}</td>
+    <td>${num(v.expected_value, 3)}<br><span class="na">[${num(v.ev_interval[0], 3)} ; ${num(v.ev_interval[1], 3)}]</span></td>
+    <td>${esc(v.data_quality)}</td></tr>`);
+  const likelyRows = res.highest_probability.map(v => `<tr><td>${esc(v.match)}</td><td>${esc(v.label)}</td>
+    <td>${pct(v.model_probability)}</td><td>${esc(v.data_quality)}</td></tr>`);
+  const insufficient = res.insufficient_data.map(i => `<li>${esc(i.match)} : ${esc(i.reason)}</li>`).join("");
+  $("results").innerHTML = `
+    <h2>Meilleures value bets (borne basse de l'EV positive)</h2>
+    ${valueRows.length ? table(["Match", "Sélection", "Cote", "Modèle", "Cote juste", "EV [IC]", "Qualité"], valueRows)
+      : `<div class="muted">Aucune opportunité statistiquement justifiée parmi ${res.scanned} rencontre(s). C'est un résultat valide.</div>`}
+    <h2 style="margin-top:16px">Probabilités les plus élevées (modèle ≥ 50 %)</h2>
+    ${likelyRows.length ? table(["Match", "Sélection", "Modèle", "Qualité"], likelyRows) : `<div class="muted">Aucune sélection au-dessus de 50 %.</div>`}
+    <h2 style="margin-top:16px">Données insuffisantes</h2>
+    ${insufficient ? `<ul>${insufficient}</ul>` : `<div class="muted">Aucune.</div>`}
+    <div class="muted" style="margin-top:12px">${res.no_statistical_edge} sélection(s) sans avantage statistique démontré. Probabilités du modèle, pas des garanties de gain.</div>`;
+}
+
+async function scan() {
+  const { out, bad } = parseFixtures($("fixtures").value);
+  if (!out.length) { $("status").innerHTML = `<span class="err">Aucune rencontre valide. Format : Domicile - Extérieur</span>`; return; }
+  $("status").textContent = `Scan de ${out.length} rencontre(s)…`;
+  try {
+    const r = await fetch("/api/engine/scan", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ fixtures: out, min_quality: $("quality").value }),
+    });
+    if (!r.ok) throw new Error((await r.json()).detail || r.statusText);
+    const res = await r.json();
+    res.insufficient_data.push(...bad.map(b => ({ match: b, reason: "format non reconnu" })));
+    render(res);
+    $("status").textContent = `Terminé : ${res.scanned} rencontre(s) analysée(s).`;
+  } catch (e) {
+    $("status").innerHTML = `<span class="err">Scan impossible : ${esc(e.message)}</span>`;
+  }
+}
+
+$("load").addEventListener("click", loadToday);
+$("scan").addEventListener("click", scan);
+</script>
+</body>
+</html>
