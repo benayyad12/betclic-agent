@@ -16,6 +16,8 @@ import time
 
 from betclic_api import BetclicClient
 from betclic_api.client import SPORTS
+from betclic_api.parser import parse_matches_response
+from betclic_api.proto import encode_field_string, encode_field_varint
 
 from .config import Settings
 
@@ -58,6 +60,21 @@ class BetclicMarketClient(BetclicClient):
         )
 
     # ─── Helpers métier ──────────────────────────────────────────────────────
+
+    def get_matches_page(self, sport: str, offset: int = 0, size: int = PAGE_SIZE) -> dict:
+        """Comme ``get_matches`` mais avec une taille de page demandée (le serveur peut la plafonner)."""
+        payload = (
+            encode_field_string(1, SPORTS.get(sport, sport))
+            + encode_field_string(2, self.locale)
+            + encode_field_varint(4, offset)
+            + encode_field_varint(5, size)
+        )
+        frames = self._post(
+            "offering.access.api.MatchService",
+            "GetMatchesBySportWithNotifications",
+            payload,
+        )
+        return parse_matches_response(frames)
 
     def get_sports_names(self) -> list[str]:
         """Retourne la liste des sports supportés par le client."""

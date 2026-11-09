@@ -47,17 +47,20 @@ _cache: dict[tuple[str, str], tuple[float, dict]] = {}
 _pool = ThreadPoolExecutor(max_workers=MAX_PAGES, thread_name_prefix="betclic-page")
 
 
-def _run_page(sport: str, market: str | None, offset: int) -> asyncio.Future:
-    return asyncio.get_running_loop().run_in_executor(_pool, _fetch_page, sport, market, offset)
+def _run_page(sport: str, market: str | None, offset: int, size: int = PAGE_SIZE) -> asyncio.Future:
+    return asyncio.get_running_loop().run_in_executor(_pool, _fetch_page, sport, market, offset, size)
 _locks: dict[tuple[str, str], asyncio.Lock] = {}
 
 
-def _fetch_page(sport: str, market: str | None, offset: int) -> dict:
+PROBE_SIZE = 200
+
+
+def _fetch_page(sport: str, market: str | None, offset: int, size: int = PAGE_SIZE) -> dict:
     """Appel bloquant exécuté dans un thread, avec des nouvelles tentatives espacées."""
     last_exc: Exception | None = None
     for attempt in range(PAGE_RETRIES + 1):
         try:
-            return _client(market).get_matches(sport, offset=offset)
+            return _client(market).get_matches_page(sport, offset=offset, size=size)
         except Exception as exc:
             last_exc = exc
             if attempt < PAGE_RETRIES:
@@ -66,13 +69,18 @@ def _fetch_page(sport: str, market: str | None, offset: int) -> dict:
 
 
 async def _collect_concurrent(sport: str, market: str | None, client: BetclicMarketClient) -> dict:
-    """Récupère les pages en parallèle. La 1re page donne le total ; un échec de page n'annule pas les autres."""
-    first = await _run_page(sport, market, 0)
+    """Récupère les pages en parallèle. La 1re requête demande une grande page ;
+    si le serveur la plafonne, on pagine avec la taille réellement renvoyée."""
+    first = await asyncio.get_running_loop().run_in_executor(
+        _pool, _fetch_page, sport, market, 0, PROBE_SIZE
+    )
     total = first.get("total") or 0
-    last_offset = min(total, MAX_PAGES * PAGE_SIZE) if total else MAX_PAGES * PAGE_SIZE
-    offsets = list(range(PAGE_SIZE, last_offset, PAGE_SIZE))
+    step = len(first.get("matches", [])) or PAGE_SIZE
+    max_matches = MAX_PAGES * PAGE_SIZE
+    last_offset = min(total, max_matches) if total else max_matches
+    offsets = list(range(step, last_offset, step))
     results = await asyncio.gather(
-        *(_run_page(sport, market, o) for o in offsets),
+        *(_run_page(sport, market, o, step) for o in offsets),
         return_exceptions=True,
     )
     pages = [first] + [r for r in results if not isinstance(r, BaseException)]
