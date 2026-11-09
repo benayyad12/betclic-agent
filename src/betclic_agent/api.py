@@ -54,8 +54,8 @@ _cache: dict[tuple[str, str], tuple[float, dict]] = {}
 _match_cache: dict[tuple[int, str], tuple[float, dict]] = {}
 PREFETCH_LIMIT = 40
 # Pages de la liste du jour récupérées en parallèle (2 max) ; le pré-chargement des cotes reste séquentiel.
-LIST_CONCURRENCY = 2
-PREFETCH_CONCURRENCY = 2
+LIST_CONCURRENCY = 8
+PREFETCH_CONCURRENCY = 8
 _background: set[asyncio.Task] = set()
 
 # Pool dédié : assez de threads pour que toutes les pages d'une journée partent en même temps

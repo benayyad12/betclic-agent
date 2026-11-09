@@ -111,7 +111,7 @@ collecte plafonnée à 30 pages avait manqués.
 5. `print_report()` + `alert_opportunities()` (Telegram si configuré)
 6. `REQUEST_DELAY_S` entre chaque match (politesse réseau)
 
-Le pré-chargement web (`api.py`, `_prefetch_markets`) tourne 2 matchs à la fois au maximum (`PREFETCH_CONCURRENCY`), chaque requête espacée de `REQUEST_DELAY_S`. Test : `test_prefetch_never_exceeds_concurrency_cap`.
+Le pré-chargement web (`api.py`, `_prefetch_markets`) tourne 8 matchs à la fois au maximum (`PREFETCH_CONCURRENCY`), chaque requête espacée de `REQUEST_DELAY_S`. Test : `test_prefetch_never_exceeds_concurrency_cap`.
 
 Les pages de liste du jour sont récupérées à 2 maximum en parallèle (`LIST_CONCURRENCY`) : c'est un
 écart assumé à la règle « une requête à la fois », choisi pour la rapidité. Le pré-chargement des cotes reste séquentiel.
