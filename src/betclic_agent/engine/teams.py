@@ -13,6 +13,16 @@ import unicodedata
 NOISE = {"fc", "cf", "afc", "sc", "ac", "as", "us", "ssc", "calcio", "club"}
 CUTOFF = 0.85
 
+# Libellés Betclic courants → libellés du jeu historique (xgabora / Football-Data).
+ALIASES = {
+    "manchester city": "Man City",
+    "manchester united": "Man United",
+    "paris saint germain": "Paris SG",
+    "psg": "Paris SG",
+    "atletico madrid": "Ath Madrid",
+    "inter milan": "Inter",
+}
+
 
 def normalize(name: str) -> str:
     decomposed = unicodedata.normalize("NFKD", name)
@@ -20,6 +30,9 @@ def normalize(name: str) -> str:
     tokens = re.findall(r"[a-z0-9]+", ascii_only)
     kept = [t for t in tokens if t not in NOISE]
     return " ".join(kept or tokens)
+
+
+ALIASES_NORM = {normalize(k): v for k, v in ALIASES.items()}
 
 
 class TeamIndex:
@@ -34,6 +47,9 @@ class TeamIndex:
         key = normalize(name)
         if not key:
             return None
+        if key in ALIASES_NORM:
+            target = ALIASES_NORM[key]
+            return target if normalize(target) in self._by_norm else None
         if key in self._by_norm:
             return self._by_norm[key]
         close = difflib.get_close_matches(key, self._by_norm.keys(), n=1, cutoff=CUTOFF)
