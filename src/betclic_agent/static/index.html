@@ -141,12 +141,69 @@
   .an-tiles { display: grid; gap: 8px; margin: 10px 0; }
   .an-tile { background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius); padding: 8px; text-align: center; font-size: 12px; }
   .an-tile b { display: block; font-size: 18px; }
+
+  .shell { display: grid; grid-template-columns: 210px minmax(0, 1fr); min-height: 100vh; }
+  .content { min-width: 0; }
+  aside.side { position: sticky; top: 0; height: 100vh; background: var(--surface); border-right: 1px solid var(--line); padding: 18px 12px; display: flex; flex-direction: column; gap: 2px; overflow-y: auto; }
+  aside.side .brand { padding: 0 8px 14px; }
+  .nav-title { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .8px; padding: 12px 10px 4px; }
+  .nav-item { display: flex; align-items: center; gap: 10px; background: none; border: 0; border-radius: 8px; padding: 9px 10px; color: var(--muted); text-align: left; cursor: pointer; text-decoration: none; font-weight: 600; }
+  .nav-item:hover { background: var(--surface-2); color: var(--text); }
+  .nav-item[aria-current="true"] { background: var(--surface-2); color: var(--accent); box-shadow: inset 3px 0 0 var(--accent); }
+  .nav-item:disabled { opacity: .45; cursor: not-allowed; }
+  .nav-item:disabled:hover { background: none; color: var(--muted); }
+  .nav-item .soon { margin-left: auto; font-size: 10px; color: var(--muted); font-weight: 500; }
+  .side-foot { margin-top: auto; font-size: 11px; color: var(--muted); padding: 10px; }
+
+  .kpis { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; padding: 16px 20px 0; }
+  .kpi { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; min-width: 0; }
+  .kpi .k-label { color: var(--muted); font-size: 12px; }
+  .kpi .k-value { font-size: 22px; font-weight: 800; margin-top: 4px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .kpi .k-value.na { font-size: 14px; font-weight: 500; color: var(--muted); font-style: italic; }
+  .kpi .k-sub { color: var(--muted); font-size: 11px; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .kpi .k-value.good { color: var(--good); }
+  .kpi .k-value.bad { color: var(--bad); }
+
+  .scanner { margin: 20px 20px 40px; padding: 4px 0 10px; }
+  .scanner .sc-head { padding: 12px 16px 6px; display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+  .scanner .sc-head h2 { font-size: 15px; margin: 0; }
+  .scanner .sc-note { color: var(--muted); font-size: 12px; padding: 0 16px 8px; }
+  .scanner .an-table { margin: 0; }
+  .scanner .an-table th, .scanner .an-table td { padding: 8px 12px; white-space: nowrap; }
+  .scanner .msg { padding: 18px 16px; }
+  .scanner .wrap { overflow-x: auto; }
+  .ev-pos { color: var(--good); font-weight: 700; }
+
+  main { margin: 0; }
+  @media (max-width: 1280px) { .kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+  @media (max-width: 960px) {
+    .shell { grid-template-columns: 1fr; }
+    aside.side { display: none; }
+    .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 14px 14px 0; }
+    .scanner { margin: 16px 14px 30px; }
+  }
 </style>
 </head>
 <body>
+<div class="shell">
+<aside class="side" aria-label="Navigation">
+  <div class="brand"><i class="logo">B</i><span class="brand-text">BETCLIC <span>AI</span></span></div>
+  <a class="nav-item" href="#top" aria-current="true">▦ Tableau de bord</a>
+  <a class="nav-item" href="#list">◎ Centre des matchs</a>
+  <a class="nav-item" href="#analysis">▤ Analyse de match</a>
+  <a class="nav-item" href="#scanner">⚡ Value bet scanner</a>
+  <a class="nav-item" href="/engine">☰ Centre du jour</a>
+  <div class="nav-title">Bientôt</div>
+  <button class="nav-item" type="button" disabled title="Non disponible : aucune donnée source">▣ Bet builder <span class="soon">non dispo</span></button>
+  <button class="nav-item" type="button" disabled title="Non disponible : aucune donnée source">◈ Bankroll <span class="soon">non dispo</span></button>
+  <button class="nav-item" type="button" disabled title="Non disponible : aucune donnée source">↗ Performance <span class="soon">non dispo</span></button>
+  <button class="nav-item" type="button" disabled title="Non disponible : aucune donnée source">✦ Assistant IA <span class="soon">non dispo</span></button>
+  <button class="nav-item" type="button" disabled title="Non disponible : aucune donnée source">⚙ Paramètres <span class="soon">non dispo</span></button>
+  <div class="side-foot">Aucune mise automatique. Les prédictions sont des estimations statistiques.</div>
+</aside>
+<div class="content" id="top">
 <header class="top">
   <div class="top-row">
-    <div class="brand"><i class="logo">B</i><span class="brand-text">BETCLIC <span>AI</span></span></div>
     <input class="search" type="search" id="search" placeholder="Rechercher une équipe ou un tournoi…" aria-label="Rechercher">
     <div class="top-controls">
       <a href="/engine" class="btn-link" style="align-self:center;color:var(--muted);font-size:12px">Centre du jour →</a>
@@ -169,6 +226,15 @@
   <div class="days" id="days" role="group" aria-label="Jour"></div>
 </header>
 
+<section class="kpis" aria-label="Indicateurs">
+  <div class="kpi"><div class="k-label">Matchs disponibles</div><div class="k-value" id="k-matches">—</div><div class="k-sub" id="k-matches-sub">Sport et jour sélectionnés</div></div>
+  <div class="kpi"><div class="k-label">Matchs analysés</div><div class="k-value" id="k-analysed">0</div><div class="k-sub">Cette session</div></div>
+  <div class="kpi"><div class="k-label">Value bets justifiées</div><div class="k-value" id="k-value">0</div><div class="k-sub">Borne basse de l'EV &gt; 0</div></div>
+  <div class="kpi"><div class="k-label">EV moyenne (justifiées)</div><div class="k-value na" id="k-edge">non disponible</div><div class="k-sub">Sur cotes Betclic réelles</div></div>
+  <div class="kpi"><div class="k-label">Bankroll</div><div class="k-value na">non disponible</div><div class="k-sub">Aucune source de mises</div></div>
+  <div class="kpi"><div class="k-label">ROI historique (hors échantillon)</div><div class="k-value na" id="k-roi">non disponible</div><div class="k-sub" id="k-roi-sub">Rapport de validation</div></div>
+</section>
+
 <main>
   <section class="panel" aria-live="polite">
     <div class="summary" id="summary">Chargement des matchs…</div>
@@ -178,6 +244,14 @@
     <div class="placeholder"><div class="big">📊</div>Cliquez sur un match pour voir ses cotes, sa marge et les chances selon les cotes.</div>
   </aside>
 </main>
+
+<section class="panel scanner" id="scanner" aria-label="Value bet scanner">
+  <div class="sc-head"><h2>Value bet scanner</h2><span class="sc-note" style="padding:0">Matchs analysés ouverts dans cette session</span></div>
+  <div class="sc-note">Seules les cotes Betclic réelles alimentent ce tableau. Aucune opportunité n'est forcée : une sélection n'apparaît que si la borne basse de son EV est positive.</div>
+  <div class="wrap" id="scan-body"></div>
+</section>
+</div>
+</div>
 
 <script>
 const $ = (id) => document.getElementById(id);
@@ -201,6 +275,8 @@ const state = {
   selectedId: null,
   seq: 0,
   analysisSeq: 0,
+  engineRuns: {},
+  validation: undefined,
 };
 
 function esc(s) {
@@ -271,6 +347,8 @@ function applyData(data) {
     renderList();
   }
   renderSummary(data);
+  renderKpis();
+  renderScanner();
 }
 
 // Snapshot local : la page s'affiche tout de suite avec les dernières données, le temps que Betclic réponde.
@@ -369,6 +447,9 @@ async function analyzeMatch(id, label, { silent = false } = {}) {
     const engine = await loadEngine(match, data);
     if (seq !== state.analysisSeq) return;
     renderAnalysis(match, data, engine);
+    state.engineRuns[String(id)] = { match, engine };
+    renderKpis();
+    renderScanner();
   } catch (e) {
     if (seq !== state.analysisSeq) return;
     if (!silent) box.innerHTML = `<div class="err">${esc(e.message)}</div>`;
@@ -638,6 +719,75 @@ const AN_RENDER = {
 };
 
 // Ticker : « mis à jour il y a Xs » chaque seconde, sans toucher à la liste.
+// Scanner et KPI : uniquement à partir des analyses faites dans la session (cotes Betclic réelles).
+function justifiedPicks(engine) {
+  const v = engine && Array.isArray(engine.value) ? engine.value : [];
+  return v.filter(e => e.available && e.expected_value > 0 && e.ev_interval[0] > 0);
+}
+
+function currentRuns() {
+  const ids = new Set(state.matches.map(m => String(m.id)));
+  return Object.entries(state.engineRuns)
+    .filter(([id]) => ids.has(id))
+    .map(([, run]) => run);
+}
+
+function renderKpis() {
+  const runs = currentRuns();
+  const picks = runs.flatMap(r => justifiedPicks(r.engine));
+  $("k-matches").textContent = state.matches.length;
+  $("k-analysed").textContent = runs.length;
+  $("k-value").textContent = picks.length;
+  const avg = picks.length ? picks.reduce((s, p) => s + p.expected_value, 0) / picks.length : null;
+  const edge = $("k-edge");
+  edge.className = avg === null ? "k-value na" : "k-value good";
+  edge.textContent = avg === null ? "non disponible" : `+${(avg * 100).toFixed(1)} %`;
+  const b = state.validation && state.validation.summary && state.validation.summary.bets;
+  const roi = $("k-roi");
+  if (b && b.roi !== null) {
+    roi.className = b.roi >= 0 ? "k-value good" : "k-value bad";
+    roi.textContent = `${(b.roi * 100).toFixed(1)} %`;
+    const ci = b.roi_ci95 ? ` · IC95 ${(b.roi_ci95[0] * 100).toFixed(1)} à ${(b.roi_ci95[1] * 100).toFixed(1)} %` : "";
+    $("k-roi-sub").textContent = `${b.count} paris simulés${ci}`;
+  } else {
+    roi.className = "k-value na";
+    roi.textContent = "non disponible";
+    $("k-roi-sub").textContent = "Rapport absent : lancez scripts/validate_engine.py";
+  }
+}
+
+function renderScanner() {
+  const runs = currentRuns();
+  const rows = runs
+    .flatMap(r => justifiedPicks(r.engine).map(p => ({ ...p, match: r.match.name || "" })))
+    .sort((a, b) => b.ev_interval[0] - a.ev_interval[0]);
+  const body = $("scan-body");
+  if (!runs.length) {
+    body.innerHTML = `<div class="msg">Aucun match analysé pour l'instant. Ouvrez un match : son analyse alimente ce scanner.</div>`;
+    return;
+  }
+  if (!rows.length) {
+    body.innerHTML = `<div class="msg">Aucune value bet justifiée parmi ${runs.length} match(s) analysé(s). Aucune opportunité n'est retenue sans évidence statistique.</div>`;
+    return;
+  }
+  const tr = rows.map(p => `
+    <tr>
+      <td>${esc(p.match)}</td>
+      <td>${esc(p.label)} <span class="na">${esc(p.market)}</span></td>
+      <td class="an-odds">${num(p.betclic_odds)}</td>
+      <td>${pct(p.model_probability)}</td>
+      <td>${num(p.fair_odds)}</td>
+      <td class="ev-pos">+${(p.expected_value * 100).toFixed(1)} %</td>
+      <td>${pct(p.ev_interval[0])} à ${pct(p.ev_interval[1])}</td>
+      <td>${num(p.confidence, 2)}</td>
+      <td>${esc(p.data_quality)}</td>
+    </tr>`).join("");
+  body.innerHTML = `<table class="an-table"><thead><tr>
+    <th>Match</th><th>Sélection</th><th>Cote Betclic</th><th>Proba modèle</th><th>Cote juste</th>
+    <th>EV</th><th>EV borne basse à haute</th><th>Confiance</th><th>Qualité</th>
+  </tr></thead><tbody>${tr}</tbody></table>`;
+}
+
 function tickAge() {
   if (!state.receivedAt) return;
   const s = Math.round((Date.now() - state.receivedAt) / 1000);
@@ -723,6 +873,10 @@ $("market").addEventListener("change", () => {
 $("search").addEventListener("input", () => renderList());
 
 renderDays();
+getJson("/api/engine/validation")
+  .then(v => { state.validation = v; })
+  .catch(() => { state.validation = null; })
+  .finally(() => { renderKpis(); if (state.anTab === "evidence") showAnTab("evidence"); });
 loadSnapshot();
 refresh();
 connectStream();
