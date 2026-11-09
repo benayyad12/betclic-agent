@@ -14,7 +14,7 @@ from .dataset import MatchRecord, load_matches
 from .errors import EngineError, UnknownTeam
 from .markets import derive_markets
 from .poisson import fit
-from .teams import TeamIndex
+from .teams import ALIASES_NORM, TeamIndex, normalize
 from .value import Selection, evaluate
 
 RECENT_DAYS = 365
@@ -143,6 +143,60 @@ def predict(home_name: str, away_name: str, odds: dict | None = None) -> dict:
         "risks": _risks(state, home, away),
         "method": "Dixon-Coles (Poisson bivarié corrigé), données antérieures à aujourd'hui uniquement",
     }
+
+
+_PICKS = (
+    ("home", "Victoire domicile"),
+    ("draw", "Match nul"),
+    ("away", "Victoire extérieur"),
+)
+
+
+def forecast(home_name: str, away_name: str) -> dict:
+    """Prédiction ponctuelle : issue, score et buts les plus probables. Pas d'intervalle."""
+    pred = predict(home_name, away_name, None)
+    result = pred["markets"]["match_result"]
+    pick, label = max(_PICKS, key=lambda item: result[item[0]])
+    top = pred["markets"]["top_scores"][0]
+    btts = pred["markets"]["btts"]["yes"]
+    over = pred["markets"]["over_under"]["2.5"]["over"]
+    under = pred["markets"]["over_under"]["2.5"]["under"]
+    return {
+        "home": pred["home"],
+        "away": pred["away"],
+        "pick": pick,
+        "pick_label": label,
+        "pick_probability": result[pick],
+        "probabilities": {"home": result["home"], "draw": result["draw"], "away": result["away"]},
+        "score": f"{top['home']}-{top['away']}",
+        "score_home": top["home"],
+        "score_away": top["away"],
+        "score_probability": top["p"],
+        "expected_goals": pred["expected_goals"],
+        "btts": "oui" if btts >= 0.5 else "non",
+        "btts_probability": btts,
+        "goals": "plus de 2.5" if over >= under else "moins de 2.5",
+        "goals_probability": over if over >= under else under,
+        "data_quality": pred["data_quality"],
+        "data_last_match": pred["data_last_match"],
+    }
+
+
+def search_teams(query: str, limit: int = 8) -> list[str]:
+    """Noms canoniques correspondant à une saisie. Liste vide si la requête est trop courte."""
+    q = normalize(query)
+    if len(q) < 2:
+        return []
+    state = _state_now()
+    names = sorted(set(state["index"]._by_norm.values()))
+    starts = [n for n in names if normalize(n).startswith(q)]
+    alias_hits = [canonical for key, canonical in ALIASES_NORM.items() if q in key]
+    contains = [n for n in names if q in normalize(n) and n not in starts]
+    ordered: list[str] = []
+    for name in starts + alias_hits + contains:
+        if name not in ordered:
+            ordered.append(name)
+    return ordered[:limit]
 
 
 QUALITY_RANK = {"faible": 0, "moyenne": 1, "élevée": 2}

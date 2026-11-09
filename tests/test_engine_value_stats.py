@@ -78,6 +78,18 @@ def test_stat_derive_unknown_team_raises():
         derive(model, "corners", "A", "Z")
 
 
+def test_alias_clubs_francais_betclic():
+    from betclic_agent.engine.teams import TeamIndex
+
+    idx = TeamIndex(["Marseille", "Lyon", "Rennes", "Lens", "Lille", "Brest", "Nice", "Reims"])
+    assert idx.resolve("Olympique de Marseille") == "Marseille"
+    assert idx.resolve("OM") == "Marseille"
+    assert idx.resolve("Olympique Lyonnais") == "Lyon"
+    assert idx.resolve("Stade Rennais") == "Rennes"
+    assert idx.resolve("LOSC") == "Lille"
+    assert idx.resolve("RC Lens") == "Lens"
+
+
 def test_team_index_alias_resolves_known_pair():
     idx = TeamIndex(["Man City", "Paris SG"])
     assert idx.resolve("Manchester City") == "Man City"

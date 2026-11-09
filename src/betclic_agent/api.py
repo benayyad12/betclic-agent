@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -29,8 +30,17 @@ from .engine import service as engine_service
 from .engine import validate
 from .engine.errors import EngineError, UnknownTeam
 from .markets import analyze_markets
-from . import soccergpt
-from .timing import IN_PLAY, PAST, UNKNOWN, UPCOMING, match_status
+from . import soccergpt, staking
+from .timing import (
+    IN_PLAY,
+    PAST,
+    UNKNOWN,
+    UPCOMING,
+    kickoff_local_day,
+    market_today,
+    market_zone,
+    match_status,
+)
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
@@ -49,6 +59,24 @@ class ScanRequest(BaseModel):
     fixtures: list[ScanFixture] = Field(min_length=1, max_length=200)
     min_quality: Literal["faible", "moyenne", "élevée"] = "faible"
     top: int = Field(default=10, ge=1, le=50)
+
+
+class ForecastFixture(BaseModel):
+    home: str = Field(min_length=2, max_length=80)
+    away: str = Field(min_length=2, max_length=80)
+    id: str | None = Field(default=None, max_length=40)
+
+
+class ForecastBatch(BaseModel):
+    fixtures: list[ForecastFixture] = Field(min_length=1, max_length=120)
+
+
+class StakeRequest(BaseModel):
+    bankroll: float = Field(gt=0, le=1_000_000_000)
+    prob: float = Field(ge=0, le=1)
+    odds: float = Field(gt=1, lt=1000)
+    fraction: float = Field(default=0.25, gt=0, le=1)
+    cap_pct: float = Field(default=0.02, gt=0, le=0.25)
 
 
 @app.get("/engine", include_in_schema=False)
@@ -182,6 +210,13 @@ def sports(market: Market | None = None) -> dict:
     return {"market": client.market, "sports": client.get_sports_names()}
 
 
+@app.get("/api/clock")
+def clock(market: Market | None = None) -> dict:
+    """Aujourd'hui dans le fuseau du marché. Sert à aligner « demain » sur le calendrier Betclic."""
+    name = (market or Settings().market).upper()
+    return {"market": name, "today": market_today(name), "timezone": str(market_zone(name))}
+
+
 @app.get("/api/today/{sport}")
 async def today(
     sport: str,
@@ -200,10 +235,13 @@ async def build_today(
 ) -> dict:
     """Construit la vue d'une journée (utilisée par REST et par le flux SSE)."""
     client = _client(market)
-    day = date or datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    day = date or market_today(client.market)
     data, from_cache = await _get_collected(sport, market, client, max_age)
 
-    matches = client.sort_by_time(client.matches_on([dict(m) for m in data["matches"]], day))
+    copied = [dict(m) for m in data["matches"]]
+    matches = client.sort_by_time(
+        [m for m in copied if kickoff_local_day(m.get("date"), client.market) == day]
+    )
     now = datetime.now(timezone.utc)
     for match in matches:
         match["status"] = match_status(match["date"], now)
@@ -219,6 +257,8 @@ async def build_today(
         "market": client.market,
         "sport": sport,
         "day": day,
+        "timezone": str(market_zone(client.market)),
+        "local_today": market_today(client.market),
         "matches": matches,
         "source": {
             "fetched_at": data["fetched_at"],
@@ -299,7 +339,7 @@ async def stream(
 ) -> StreamingResponse:
     """Flux Server-Sent Events : l'état courant part immédiatement, puis chaque changement est poussé."""
     name = (market or Settings().market).upper()
-    day = date or datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    day = date or market_today(name)
     key = (sport, name, day)
     hub = _hubs.get(key)
     if hub is None:
@@ -378,16 +418,8 @@ async def engine_match(home: str = Query(min_length=2, max_length=80),
         odds = {"home": odds_home, "draw": odds_draw, "away": odds_away}
     try:
         return await asyncio.to_thread(engine_service.predict, home, away, odds)
-    except UnknownTeam as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except EngineError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except FileNotFoundError as exc:
-        logger.error("Données moteur absentes : %s", exc)
-        raise HTTPException(status_code=503, detail="Données historiques absentes : placez data/Matches.csv.") from exc
     except Exception as exc:
-        logger.exception("Erreur moteur pour %s vs %s", home, away)
-        raise HTTPException(status_code=500, detail=f"Erreur interne du moteur ({type(exc).__name__}) : voir les logs serveur.") from exc
+        _raise_engine(exc, home, away)
 
 
 @app.get("/api/engine/validation")
@@ -404,6 +436,96 @@ async def engine_scan(payload: ScanRequest) -> dict:
     """Daily Center : scanne une liste de rencontres sans forcer de recommandation."""
     fixtures = [f.model_dump() for f in payload.fixtures]
     return await asyncio.to_thread(engine_service.scan, fixtures, payload.min_quality, payload.top)
+
+
+def _raise_engine(exc: Exception, home: str, away: str) -> None:
+    if isinstance(exc, UnknownTeam):
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    if isinstance(exc, EngineError):
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if isinstance(exc, FileNotFoundError):
+        logger.error("Données moteur absentes : %s", exc)
+        raise HTTPException(status_code=503, detail="Données historiques absentes : placez data/Matches.csv.") from exc
+    logger.exception("Erreur moteur pour %s vs %s", home, away)
+    raise HTTPException(
+        status_code=500,
+        detail=f"Erreur interne du moteur ({type(exc).__name__}) : voir les logs serveur.",
+    ) from exc
+
+
+def _forecast_one(home: str, away: str, match_id: str | None = None) -> dict:
+    try:
+        out = engine_service.forecast(home, away)
+    except (UnknownTeam, EngineError) as exc:
+        out = {"home": home, "away": away, "error": str(exc)}
+    if match_id:
+        out["id"] = match_id
+    return out
+
+
+@app.get("/api/engine/forecast")
+async def engine_forecast(home: str = Query(min_length=2, max_length=80),
+                          away: str = Query(min_length=2, max_length=80)) -> dict:
+    """Prédiction ponctuelle : issue, score et buts. Aucun intervalle n'est renvoyé."""
+    try:
+        return await asyncio.to_thread(engine_service.forecast, home, away)
+    except Exception as exc:
+        _raise_engine(exc, home, away)
+
+
+@app.post("/api/engine/forecasts")
+async def engine_forecasts(payload: ForecastBatch) -> dict:
+    """Prédictions ponctuelles d'une liste de matchs. Une équipe inconnue n'interrompt pas le lot."""
+    def run() -> dict:
+        return {"forecasts": [_forecast_one(fx.home, fx.away, fx.id) for fx in payload.fixtures]}
+
+    try:
+        return await asyncio.to_thread(run)
+    except FileNotFoundError as exc:
+        _raise_engine(exc, "", "")
+
+
+@app.get("/api/engine/teams")
+async def engine_teams(q: str = Query(min_length=2, max_length=40)) -> dict:
+    """Suggestions de noms reconnus par le moteur."""
+    try:
+        return {"teams": await asyncio.to_thread(engine_service.search_teams, q)}
+    except FileNotFoundError as exc:
+        _raise_engine(exc, q, "")
+
+
+@app.post("/api/staking/suggest")
+def staking_suggest(payload: StakeRequest) -> dict:
+    """Mise suggérée. Aucun pari n'est envoyé."""
+    full = staking.kelly_fraction(payload.prob, payload.odds)
+    stake = staking.fractional_kelly_stake(
+        payload.bankroll, payload.prob, payload.odds, payload.fraction, payload.cap_pct,
+    )
+    return {
+        "stake": stake,
+        "flat_stake": staking.flat_stake(payload.bankroll),
+        "kelly_full": full,
+        "fraction": payload.fraction,
+        "cap_pct": payload.cap_pct,
+        "placed": False,
+    }
+
+
+@app.get("/api/status")
+def app_status() -> dict:
+    """État local, sans secret."""
+    settings = Settings()
+    root = Path(__file__).resolve().parents[2]
+    return {
+        "market": settings.market,
+        "min_margin_pct": settings.min_margin_pct,
+        "max_margin_pct": settings.max_margin_pct,
+        "telegram_configured": bool(settings.telegram_token and settings.telegram_chat_id),
+        "soccergpt_configured": bool(os.getenv("SPORTMONKS_API_TOKEN") and os.getenv("OPENAI_API_KEY")),
+        "dataset_present": (root / "data" / "Matches.csv").exists(),
+        "validation_present": (root / "data" / "validation_report.json").exists(),
+        "automatic_betting": False,
+    }
 
 
 async def _markets_for(match_id: int, name: str) -> dict:

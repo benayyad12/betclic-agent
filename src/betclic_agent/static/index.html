@@ -6,14 +6,14 @@
 <title>BetclicAgent — matchs du jour</title>
 <style>
   :root {
-    --bg: #0b0f1a;
-    --surface: #131a2a;
-    --surface-2: #1a2338;
-    --line: #242f48;
-    --text: #e8ecf5;
-    --muted: #8b96b0;
-    --accent: #ffd21f;
-    --accent-ink: #14140a;
+    --bg: #070b12;
+    --surface: #101722;
+    --surface-2: #172033;
+    --line: #243044;
+    --text: #eef3fb;
+    --muted: #8b97ad;
+    --accent: #3dff9a;
+    --accent-ink: #06210f;
     --live: #ff4d5e;
     --good: #22c55e;
     --mid: #f5a524;
@@ -27,7 +27,9 @@
 
   header.top { position: sticky; top: 0; z-index: 10; background: rgba(11,15,26,.92); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); }
   .top-row { display: flex; align-items: center; gap: 14px; padding: 12px 20px; }
-  .brand { display: flex; align-items: center; gap: 10px; font-weight: 800; letter-spacing: .5px; font-size: 16px; white-space: nowrap; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 800; letter-spacing: .4px; font-size: 15px; white-space: nowrap; }
+  .brand b { display: block; font-size: 14px; }
+  .brand small { display: block; color: var(--muted); font-weight: 500; font-size: 11px; letter-spacing: 0; }
   .brand span { color: var(--accent); }
   .logo { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 8px; background: var(--accent); color: var(--accent-ink); font-style: normal; font-weight: 900; }
   .search { flex: 1; max-width: 360px; background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: 8px 14px; }
@@ -60,10 +62,21 @@
   .section-title.live::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--live); }
   .comp { padding: 10px 16px 4px; font-weight: 700; color: var(--text); font-size: 13px; }
 
-  .row { display: grid; grid-template-columns: 64px minmax(0, 1fr) auto 18px; align-items: center; gap: 12px; width: 100%; padding: 12px 16px; background: none; border: 0; border-top: 1px solid var(--line); cursor: pointer; text-align: left; color: var(--text); }
+  .row { display: grid; grid-template-columns: 64px minmax(0, 1fr) 132px 18px; align-items: center; gap: 12px; width: calc(100% - 16px); margin: 6px 8px; padding: 12px 14px; background: #0d1420; border: 1px solid var(--line); border-radius: 12px; cursor: pointer; text-align: left; color: var(--text); }
+  .pred { display: grid; justify-items: end; gap: 1px; min-width: 0; }
+  .pred b { color: var(--good); font-size: 12px; font-weight: 700; }
+  .pred .score { font-size: 18px; font-weight: 800; letter-spacing: .3px; }
+  .pred .p { color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+  .pred.wait, .pred.na { color: var(--muted); font-size: 11px; font-style: italic; }
+  .pred-hero { background: linear-gradient(180deg, rgba(61,255,154,.12), rgba(61,255,154,.03)); border: 1px solid rgba(61,255,154,.35); border-radius: 14px; padding: 14px; margin-bottom: 12px; }
+  .pred-kicker { color: var(--good); font-size: 11px; font-weight: 700; letter-spacing: .8px; text-transform: uppercase; }
+  .pred-call { font-size: 20px; font-weight: 800; margin-top: 2px; }
+  .pred-score { font-size: 32px; font-weight: 800; letter-spacing: 1px; }
+  .pred-meta { color: var(--muted); font-size: 12px; margin-top: 8px; }
   .teams-stack { display: grid; gap: 4px; min-width: 0; }
   .team { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
   .team + .team { color: var(--muted); font-weight: 500; }
+  .teams-stack .status { justify-self: start; width: fit-content; margin-top: 4px; }
   .odds-tiles { display: grid; gap: 6px; margin: 10px 0 4px; }
   .odds-tiles button { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 4px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; color: var(--text); cursor: default; }
   .odds-tiles .o-label { color: var(--muted); font-size: 11px; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
@@ -127,7 +140,9 @@
     .top-controls { margin-left: 0; flex-wrap: wrap; }
     nav.sports, .days { padding-left: 14px; padding-right: 14px; }
     main { padding: 0 14px 30px; }
-    .row { grid-template-columns: 48px minmax(0, 1fr) auto 12px; gap: 8px; padding: 10px 12px; }
+    .row { grid-template-columns: 48px minmax(0, 1fr) 96px 12px; gap: 8px; padding: 10px 12px; }
+    .pred .score { font-size: 16px; }
+    .pred b { font-size: 10px; }
     .teams { white-space: normal; }
     .diffusion { white-space: nowrap; }
   }
@@ -154,6 +169,25 @@
   .nav-item:disabled:hover { background: none; color: var(--muted); }
   .nav-item .soon { margin-left: auto; font-size: 10px; color: var(--muted); font-weight: 500; }
   .side-foot { margin-top: auto; font-size: 11px; color: var(--muted); padding: 10px; }
+  .mobile-nav { display: none; gap: 6px; padding: 8px 14px; overflow-x: auto; border-bottom: 1px solid var(--line); }
+  .mobile-nav button { background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: 6px 10px; color: var(--muted); white-space: nowrap; cursor: pointer; }
+  .mobile-nav button[aria-current="true"] { color: var(--accent-ink); background: var(--accent); border-color: var(--accent); }
+  .extra { margin: 16px 20px 40px; padding: 16px; }
+  .extra h2 { margin: 0 0 6px; font-size: 18px; }
+  .extra .lead { color: var(--muted); font-size: 13px; margin-bottom: 14px; }
+  .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
+  .form-grid label { display: grid; gap: 4px; color: var(--muted); font-size: 12px; }
+  .form-grid input, .form-grid select { background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+  .primary { background: var(--accent); color: var(--accent-ink); border: 0; border-radius: 8px; padding: 8px 14px; font-weight: 800; cursor: pointer; }
+  .ghost { background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; cursor: pointer; }
+  .chat { display: grid; gap: 8px; margin-top: 12px; }
+  .bubble { background: var(--surface-2); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; }
+  .bubble.me { border-color: rgba(61,255,154,.4); }
+  .svg-chart { width: 100%; height: 160px; }
+  body[data-mode="analysis"] main { grid-template-columns: 1fr; }
+  body[data-mode="analysis"] #match-board { display: none; }
+  body[data-mode="matches"] aside.analysis { display: none; }
+  body[data-mode="matches"] main { grid-template-columns: 1fr; }
 
   .kpis { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; padding: 16px 20px 0; }
   .kpi { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; min-width: 0; }
@@ -179,6 +213,8 @@
   @media (max-width: 960px) {
     .shell { grid-template-columns: 1fr; }
     aside.side { display: none; }
+    .mobile-nav { display: flex; }
+    .extra { margin: 14px; }
     .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 14px 14px 0; }
     .scanner { margin: 16px 14px 30px; }
   }
@@ -187,21 +223,31 @@
 <body>
 <div class="shell">
 <aside class="side" aria-label="Navigation">
-  <div class="brand"><i class="logo">B</i><span class="brand-text">BETCLIC <span>AI</span></span></div>
-  <a class="nav-item" href="#top" aria-current="true">▦ Tableau de bord</a>
-  <a class="nav-item" href="#list">◎ Centre des matchs</a>
-  <a class="nav-item" href="#analysis">▤ Analyse de match</a>
-  <a class="nav-item" href="#scanner">⚡ Value bet scanner</a>
+  <div class="brand"><i class="logo">B</i><span><b>BETCLIC <span>AI</span></b><small>Betting Assistant</small></span></div>
+  <button class="nav-item" type="button" data-view="board" aria-current="true">▦ Tableau de bord</button>
+  <button class="nav-item" type="button" data-view="matches">◎ Centre des matchs</button>
+  <button class="nav-item" type="button" data-view="analysis">▤ Analyse de match</button>
+  <button class="nav-item" type="button" data-view="scanner">⚡ Value bet scanner</button>
   <a class="nav-item" href="/engine">☰ Centre du jour</a>
-  <div class="nav-title">Bientôt</div>
-  <button class="nav-item" type="button" disabled title="Non disponible : aucune donnée source">▣ Bet builder <span class="soon">non dispo</span></button>
-  <button class="nav-item" type="button" disabled title="Non disponible : aucune donnée source">◈ Bankroll <span class="soon">non dispo</span></button>
-  <button class="nav-item" type="button" disabled title="Non disponible : aucune donnée source">↗ Performance <span class="soon">non dispo</span></button>
-  <button class="nav-item" type="button" disabled title="Non disponible : aucune donnée source">✦ Assistant IA <span class="soon">non dispo</span></button>
-  <button class="nav-item" type="button" disabled title="Non disponible : aucune donnée source">⚙ Paramètres <span class="soon">non dispo</span></button>
+  <button class="nav-item" type="button" data-view="builder">▣ Bet builder</button>
+  <button class="nav-item" type="button" data-view="bankroll">◈ Bankroll</button>
+  <button class="nav-item" type="button" data-view="performance">↗ Performance</button>
+  <button class="nav-item" type="button" data-view="assistant">✦ Assistant</button>
+  <button class="nav-item" type="button" data-view="settings">⚙ Paramètres</button>
   <div class="side-foot">Aucune mise automatique. Les prédictions sont des estimations statistiques.</div>
 </aside>
 <div class="content" id="top">
+<nav class="mobile-nav" aria-label="Sections">
+  <button type="button" data-view="board" aria-current="true">Tableau</button>
+  <button type="button" data-view="matches">Matchs</button>
+  <button type="button" data-view="analysis">Analyse</button>
+  <button type="button" data-view="scanner">Scanner</button>
+  <button type="button" data-view="builder">Builder</button>
+  <button type="button" data-view="bankroll">Bankroll</button>
+  <button type="button" data-view="performance">Perf.</button>
+  <button type="button" data-view="assistant">IA</button>
+  <button type="button" data-view="settings">Réglages</button>
+</nav>
 <header class="top">
   <div class="top-row">
     <input class="search" type="search" id="search" placeholder="Rechercher une équipe ou un tournoi…" aria-label="Rechercher">
@@ -226,18 +272,25 @@
   <div class="days" id="days" role="group" aria-label="Jour"></div>
 </header>
 
+<div id="board">
 <section class="kpis" aria-label="Indicateurs">
   <div class="kpi"><div class="k-label">Matchs disponibles</div><div class="k-value" id="k-matches">—</div><div class="k-sub" id="k-matches-sub">Sport et jour sélectionnés</div></div>
   <div class="kpi"><div class="k-label">Matchs analysés</div><div class="k-value" id="k-analysed">0</div><div class="k-sub">Cette session</div></div>
   <div class="kpi"><div class="k-label">Value bets justifiées</div><div class="k-value" id="k-value">0</div><div class="k-sub">Borne basse de l'EV &gt; 0</div></div>
   <div class="kpi"><div class="k-label">EV moyenne (justifiées)</div><div class="k-value na" id="k-edge">non disponible</div><div class="k-sub">Sur cotes Betclic réelles</div></div>
-  <div class="kpi"><div class="k-label">Bankroll</div><div class="k-value na">non disponible</div><div class="k-sub">Aucune source de mises</div></div>
+  <div class="kpi"><div class="k-label">Bankroll</div><div class="k-value na" id="k-bankroll">non disponible</div><div class="k-sub" id="k-bankroll-sub">À saisir dans Paramètres</div></div>
   <div class="kpi"><div class="k-label">ROI historique (hors échantillon)</div><div class="k-value na" id="k-roi">non disponible</div><div class="k-sub" id="k-roi-sub">Rapport de validation</div></div>
 </section>
 
 <main>
-  <section class="panel" aria-live="polite">
+  <section class="panel" id="match-board" aria-live="polite">
     <div class="summary" id="summary">Chargement des matchs…</div>
+    <form id="quick-forecast" class="form-grid" style="padding:12px 16px 4px">
+      <label>Domicile<input id="qf-home" placeholder="Paris SG" autocomplete="off"></label>
+      <label>Extérieur<input id="qf-away" placeholder="Marseille" autocomplete="off"></label>
+      <button class="primary" type="submit">Prédire ce match</button>
+    </form>
+    <div id="qf-out" style="padding:0 16px 8px"></div>
     <div class="list" id="list"></div>
   </section>
   <aside class="panel analysis" id="analysis" aria-label="Analyse du match">
@@ -249,6 +302,69 @@
   <div class="sc-head"><h2>Value bet scanner</h2><span class="sc-note" style="padding:0">Matchs analysés ouverts dans cette session</span></div>
   <div class="sc-note">Seules les cotes Betclic réelles alimentent ce tableau. Aucune opportunité n'est forcée : une sélection n'apparaît que si la borne basse de son EV est positive.</div>
   <div class="wrap" id="scan-body"></div>
+</section>
+</div>
+
+<section class="panel extra" id="view-builder" hidden>
+  <h2>Bet builder</h2>
+  <p class="lead">Combine des sélections déjà prédites. Aucune mise n'est envoyée à Betclic. Si deux sélections viennent du même match, la probabilité combinée n'est pas calculée : elles ne sont pas indépendantes.</p>
+  <div id="builder-legs"></div>
+  <div class="form-grid" style="margin-top:12px">
+    <label>Libellé<input id="leg-label" placeholder="Victoire domicile"></label>
+    <label>Cote décimale<input id="leg-odds" type="number" min="1.01" step="0.01" placeholder="1.85"></label>
+    <label>Proba modèle (0 à 1)<input id="leg-prob" type="number" min="0" max="1" step="0.01" placeholder="0.55"></label>
+    <label>Match (optionnel)<input id="leg-match" placeholder="Paris SG - Marseille"></label>
+  </div>
+  <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+    <button class="primary" type="button" id="leg-add">Ajouter la sélection</button>
+    <button class="ghost" type="button" id="leg-clear">Vider</button>
+  </div>
+  <div id="builder-out" style="margin-top:14px"></div>
+</section>
+
+<section class="panel extra" id="view-bankroll" hidden>
+  <h2>Bankroll</h2>
+  <p class="lead">Suivi local, sur cet appareil uniquement. L'évolution n'apparaît que pour les résultats que vous enregistrez. Rien n'est inventé, rien n'est misé automatiquement.</p>
+  <div id="bankroll-body"></div>
+</section>
+
+<section class="panel extra" id="view-performance" hidden>
+  <h2>Performance</h2>
+  <p class="lead">Validation walk-forward hors échantillon. Les cotes sont celles du jeu historique, pas les clôtures Betclic. Une rentabilité n'est pas affirmée sans preuve.</p>
+  <div id="performance-body"></div>
+</section>
+
+<section class="panel extra" id="view-assistant" hidden>
+  <h2>Assistant</h2>
+  <p class="lead">Réponses calculées à partir du moteur et des matchs ouverts. Ce n'est pas un texte inventé. SoccerGPT n'est appelé que si les clés sont présentes dans .env.</p>
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <button class="ghost" type="button" data-ask="picks">Value bets de la session</button>
+    <button class="ghost" type="button" data-ask="roi">Le modèle est-il rentable ?</button>
+    <button class="ghost" type="button" data-ask="day">Prédictions du jour</button>
+  </div>
+  <div class="chat" id="chat"></div>
+  <form id="ask-form" style="display:flex;gap:8px;margin-top:10px">
+    <input id="ask-input" placeholder="Ex. meilleur score de la liste" style="flex:1;background:var(--surface-2);border:1px solid var(--line);border-radius:8px;padding:8px 10px">
+    <button class="primary" type="submit">Demander</button>
+  </form>
+  <div id="gpt-box" style="margin-top:16px"></div>
+</section>
+
+<section class="panel extra" id="view-settings" hidden>
+  <h2>Paramètres</h2>
+  <p class="lead">Réglages locaux. Les secrets restent dans .env et ne s'affichent pas ici.</p>
+  <div class="form-grid">
+    <label>Bankroll de départ<input id="set-bankroll" type="number" min="0" step="1" placeholder="vide = non disponible"></label>
+    <label>Unité affichée<input id="set-currency" maxlength="8" value="EUR"></label>
+    <label>Fraction de Kelly
+      <select id="set-kelly"><option value="0.1">10 %</option><option value="0.25" selected>25 %</option><option value="0.5">50 %</option></select>
+    </label>
+    <label>Plafond par pari
+      <select id="set-cap"><option value="0.01">1 %</option><option value="0.02" selected>2 %</option><option value="0.05">5 %</option></select>
+    </label>
+  </div>
+  <div style="margin-top:12px"><button class="primary" type="button" id="set-save">Enregistrer sur cet appareil</button></div>
+  <div id="settings-status" style="margin-top:14px"></div>
 </section>
 </div>
 </div>
@@ -277,6 +393,16 @@ const state = {
   analysisSeq: 0,
   engineRuns: {},
   validation: undefined,
+  forecasts: {},
+  forecastSeq: 0,
+  forecastKey: "",
+  view: "board",
+  localToday: "",
+  timezone: "",
+  dayPinned: false,
+  prefs: { bankroll: null, currency: "EUR", kelly: 0.25, cap: 0.02 },
+  legs: [],
+  ledger: [],
 };
 
 function esc(s) {
@@ -295,20 +421,32 @@ function shiftDay(base, offset) {
   return d.toISOString().substring(0, 10);
 }
 
+function humanError(message) {
+  const m = String(message || "");
+  if (/begmedia|NameResolution|Betclic indisponible|Failed to resolve|502/i.test(m)) {
+    return "Betclic est injoignable. La prédiction du modèle reste disponible : saisissez les deux équipes ci-dessus.";
+  }
+  return m.length > 220 ? m.slice(0, 220) + "…" : m;
+}
+
 async function getJson(url) {
   const r = await fetch(url);
   const body = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(body.detail || `Erreur HTTP ${r.status}`);
+  if (!r.ok) throw new Error(humanError(body.detail || `Erreur HTTP ${r.status}`));
   return body;
 }
 
+function dayDiff(a, b) {
+  return Math.round((Date.parse(b + "T00:00:00Z") - Date.parse(a + "T00:00:00Z")) / 86400000);
+}
+
 function renderDays() {
-  const today = new Date().toISOString().substring(0, 10);
+  const today = state.localToday || new Date().toISOString().substring(0, 10);
   const labels = { "-1": "Hier", "0": "Aujourd'hui", "1": "Demain" };
   let html = "";
   for (const off of [-1, 0, 1, 2]) {
     const iso = shiftDay(today, off);
-    const label = labels[off] ?? new Date(iso + "T00:00:00Z").toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
+    const label = labels[String(dayDiff(today, iso))] ?? new Date(iso + "T00:00:00Z").toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
     html += `<button class="chip" data-day="${iso}" aria-pressed="${iso === state.day}">${esc(label)}</button>`;
   }
   $("days").innerHTML = html;
@@ -349,6 +487,7 @@ function applyData(data) {
   renderSummary(data);
   renderKpis();
   renderScanner();
+  scheduleForecasts();
 }
 
 // Snapshot local : la page s'affiche tout de suite avec les dernières données, le temps que Betclic réponde.
@@ -370,7 +509,7 @@ function renderSummary(data) {
     `<span class="stat"><b>${data.matches.length}</b> matchs</span>` +
     `<span class="stat"><b>${c.in_play}</b> en cours (estimé)</span>` +
     `<span class="stat"><b>${c.upcoming}</b> à venir</span>` +
-    `<span class="stat">${esc(SPORT_LABEL[state.sport])} • ${esc(data.day)} • données à ${when}${s.from_cache ? " (cache)" : ""}</span>` +
+    `<span class="stat">${esc(SPORT_LABEL[state.sport])} • ${esc(data.day)}${data.timezone ? " · " + esc(data.timezone) : ""} • données à ${when}${s.from_cache ? " (cache)" : ""}</span>` +
     warn;
 }
 
@@ -379,6 +518,14 @@ function teamLines(name) {
   const parts = String(name ?? "").split(/\s+-\s+|\s+vs\s+/i);
   if (parts.length < 2) return `<span class="team">${esc(name)}</span>`;
   return `<span class="team">${esc(parts[0])}</span><span class="team">${esc(parts.slice(1).join(" - "))}</span>`;
+}
+
+function predCell(id) {
+  if (state.sport !== "football") return `<span class="pred na">football seul</span>`;
+  const f = state.forecasts[String(id)];
+  if (!f) return `<span class="pred wait">calcul…</span>`;
+  if (f.error) return `<span class="pred na">non disponible</span>`;
+  return `<span class="pred"><b>${esc(f.pick_label)}</b><span class="score">${esc(f.score)}</span><span class="p">${pct(f.pick_probability)}</span></span>`;
 }
 
 function renderList() {
@@ -404,8 +551,8 @@ function renderList() {
         const diffusion = m.live_stream ? `<span class="diffusion">DIRECT</span>` : "";
         html += `<button class="row" data-id="${esc(m.id)}" aria-current="${current}">
           <span class="time">${hhmm(m.date)}</span>
-          <span class="teams-stack">${teamLines(m.name)}${diffusion}</span>
-          <span class="status ${esc(m.status)}">${esc(STATUS_LABEL[m.status] || "")}</span>
+          <span class="teams-stack">${teamLines(m.name)}${diffusion}<span class="status ${esc(m.status)}">${esc(STATUS_LABEL[m.status] || "")}</span></span>
+          ${predCell(m.id)}
           <span class="chev" aria-hidden="true">›</span>
         </button>`;
       }
@@ -431,29 +578,33 @@ async function analyzeMatch(id, label, { silent = false } = {}) {
   const box = $("analysis");
   if (!silent) {
     state.analysisSig = "";
-    box.innerHTML = `<div class="msg">Analyse de ${esc(label)}…</div>`;
+    box.innerHTML = `<div class="msg">Prédiction de ${esc(label)}…</div>`;
+    document.body.dataset.mode = "analysis";
+    document.querySelectorAll("[data-view]").forEach(el => el.setAttribute("aria-current", el.dataset.view === "analysis" ? "true" : "false"));
   }
+  const match = state.matches.find(m => String(m.id) === String(id)) || { name: label, id };
+  let data = { markets: [] };
+  let oddsError = "";
   try {
     const params = new URLSearchParams();
     if (state.market) params.set("market", state.market);
-    const data = await getJson(`/api/analyze/${encodeURIComponent(id)}?${params}`);
-    if (seq !== state.analysisSeq) return;
-    // Mise à jour silencieuse : on ne re-rend que si les cotes ont bougé.
-    const sig = JSON.stringify(data.markets);
-    if (silent && sig === state.analysisSig) return;
-    state.analysisSig = sig;
-    state.analysisAt = new Date().toTimeString().substring(0, 8);
-    const match = state.matches.find(m => String(m.id) === String(id)) || { name: label };
-    const engine = await loadEngine(match, data);
-    if (seq !== state.analysisSeq) return;
-    renderAnalysis(match, data, engine);
-    state.engineRuns[String(id)] = { match, engine };
-    renderKpis();
-    renderScanner();
+    data = await getJson(`/api/analyze/${encodeURIComponent(id)}?${params}`);
   } catch (e) {
-    if (seq !== state.analysisSeq) return;
-    if (!silent) box.innerHTML = `<div class="err">${esc(e.message)}</div>`;
+    oddsError = e.message;
   }
+  if (seq !== state.analysisSeq) return;
+  data.oddsError = oddsError;
+  const sig = JSON.stringify(data.markets || []);
+  if (silent && sig === state.analysisSig && !oddsError) return;
+  state.analysisSig = sig;
+  state.analysisAt = new Date().toTimeString().substring(0, 8);
+  const engine = await loadEngine(match, data);
+  if (seq !== state.analysisSeq) return;
+  renderAnalysis(match, data, engine);
+  if (engine && !engine.error) state.engineRuns[String(id)] = { match, engine };
+  renderKpis();
+  renderScanner();
+  renderList();
 }
 
 function startAnalysisPoll(id, label) {
@@ -478,12 +629,35 @@ function marketLabel(name) {
   return name.replace(" (t. rég)", "");
 }
 
-function renderOverviewHtml(match, data) {
+function engineHero(engine) {
+  if (!engine || engine.error || !engine.markets || !engine.markets.match_result) {
+    return `<div class="pred-hero"><div class="pred-kicker">Prédiction</div><div class="pred-call">Indisponible</div><div class="pred-meta">${esc(engine && engine.error || "moteur non joignable")}</div></div>`;
+  }
+  const r = engine.markets.match_result;
+  const ranked = [["Victoire domicile", r.home], ["Match nul", r.draw], ["Victoire extérieur", r.away]].sort((a, b) => b[1] - a[1]);
+  const top = (engine.markets.top_scores || [])[0];
+  const btts = engine.markets.btts && engine.markets.btts.yes >= 0.5 ? "oui" : "non";
+  const line = engine.markets.over_under && engine.markets.over_under["2.5"];
+  const goals = line ? (line.over >= line.under ? "plus de 2.5" : "moins de 2.5") : "non disponible";
+  return `<div class="pred-hero">
+    <div class="pred-kicker">Prédiction</div>
+    <div class="pred-call">${esc(ranked[0][0])}</div>
+    <div class="pred-score">${top ? `${top.home}-${top.away}` : "—"}</div>
+    <div class="pred-meta">${pct(ranked[0][1])} · xG ${num(engine.expected_goals.home)} – ${num(engine.expected_goals.away)} · les deux marquent : ${btts} · ${goals}</div>
+    <div class="an-tiles" style="grid-template-columns:repeat(3,1fr);margin-top:10px">
+      <div class="an-tile">Domicile<b>${pct(r.home)}</b></div>
+      <div class="an-tile">Nul<b>${pct(r.draw)}</b></div>
+      <div class="an-tile">Extérieur<b>${pct(r.away)}</b></div>
+    </div>
+  </div>`;
+}
+
+function renderOverviewHtml(match, data, engine) {
   const reliable = data.markets.filter(m => m.reliable && m.selections.length);
   const others = data.markets.filter(m => !m.reliable);
   const when = match.date ? new Date(match.date).toISOString().substring(0, 16).replace("T", " ") + " UTC" : "";
 
-  let html = `<div class="an-head">
+  let html = engineHero(engine) + (data.oddsError ? `<div class="banner">Cotes indisponibles : ${esc(data.oddsError)}. La prédiction ci-dessus ne dépend pas des cotes.</div>` : "") + `<div class="an-head">
     <div class="an-title">${esc(match.name)}</div>
     <div class="an-meta">${esc(match.competition || "")} • ${esc(when)} • ${esc(STATUS_LABEL[match.status] || "")}</div>
     <div class="an-meta live-cotes"><span class="dot"></span> Cotes mises à jour toutes les 15 s${state.analysisAt ? " • à " + esc(state.analysisAt) : ""}</div>
@@ -601,7 +775,7 @@ function showAnTab(key) {
 }
 
 const AN_RENDER = {
-  overview: (match, data) => renderOverviewHtml(match, data),
+  overview: (match, data, engine) => renderOverviewHtml(match, data, engine),
 
   match: (match, data, engine) => {
     if (!engine || engine.error) return missingEngine(engine);
@@ -688,11 +862,11 @@ const AN_RENDER = {
       const justified = v.ev_interval[0] > 0;
       return `<tr><td>${esc(v.label)}</td><td>${esc(v.betclic_odds)}</td><td>${pct(v.implied_probability)}</td>
         <td>${pct(v.model_probability)}</td><td>${num(v.fair_odds)}</td>
-        <td>${num(v.expected_value, 3)}<br><span class="na">[${num(v.ev_interval[0], 3)} ; ${num(v.ev_interval[1], 3)}]</span></td>
+        <td>${(v.expected_value * 100).toFixed(1)} %</td>
         <td>${num(v.confidence, 2)}</td><td>${esc(v.data_quality)}</td>
         <td>${justified ? "avantage justifié" : "pas d'avantage démontré"}</td></tr>`;
     }).join("");
-    return `<table class="an-table"><tr><th>Sélection</th><th>Cote</th><th>Implicite</th><th>Modèle</th><th>Cote juste</th><th>EV [IC]</th><th>Confiance</th><th>Qualité</th><th>Verdict</th></tr>${rows}</table>
+    return `<table class="an-table"><tr><th>Sélection</th><th>Cote</th><th>Implicite</th><th>Modèle</th><th>Cote juste</th><th>EV</th><th>Confiance</th><th>Qualité</th><th>Verdict</th></tr>${rows}</table>
       <div class="legend">EV = probabilité × cote − 1. Un avantage n'est retenu que si la borne basse de l'intervalle est positive. La confiance mesure la fiabilité de l'estimation, pas la probabilité de gagner.</div>`;
   },
 
@@ -744,6 +918,17 @@ function renderKpis() {
   edge.textContent = avg === null ? "non disponible" : `+${(avg * 100).toFixed(1)} %`;
   const b = state.validation && state.validation.summary && state.validation.summary.bets;
   const roi = $("k-roi");
+  const bank = $("k-bankroll");
+  if (state.prefs.bankroll > 0) {
+    const current = bankrollNow();
+    bank.className = "k-value";
+    bank.textContent = `${current.toFixed(0)} ${state.prefs.currency || ""}`.trim();
+    $("k-bankroll-sub").textContent = "Suivi local, aucune mise envoyée";
+  } else {
+    bank.className = "k-value na";
+    bank.textContent = "non disponible";
+    $("k-bankroll-sub").textContent = "À saisir dans Paramètres";
+  }
   if (b && b.roi !== null) {
     roi.className = b.roi >= 0 ? "k-value good" : "k-value bad";
     roi.textContent = `${(b.roi * 100).toFixed(1)} %`;
@@ -777,14 +962,13 @@ function renderScanner() {
       <td class="an-odds">${num(p.betclic_odds)}</td>
       <td>${pct(p.model_probability)}</td>
       <td>${num(p.fair_odds)}</td>
-      <td class="ev-pos">+${(p.expected_value * 100).toFixed(1)} %</td>
-      <td>${pct(p.ev_interval[0])} à ${pct(p.ev_interval[1])}</td>
+      <td class="ev-pos">${(p.expected_value * 100).toFixed(1)} %</td>
       <td>${num(p.confidence, 2)}</td>
       <td>${esc(p.data_quality)}</td>
     </tr>`).join("");
   body.innerHTML = `<table class="an-table"><thead><tr>
     <th>Match</th><th>Sélection</th><th>Cote Betclic</th><th>Proba modèle</th><th>Cote juste</th>
-    <th>EV</th><th>EV borne basse à haute</th><th>Confiance</th><th>Qualité</th>
+    <th>EV</th><th>Confiance</th><th>Qualité</th>
   </tr></thead><tbody>${tr}</tbody></table>`;
 }
 
@@ -849,6 +1033,7 @@ $("days").addEventListener("click", (ev) => {
   const btn = ev.target.closest("button[data-day]");
   if (!btn) return;
   state.day = btn.dataset.day;
+  state.dayPinned = true;
   $("day").value = state.day;
   renderDays();
   resetForNewQuery();
@@ -859,6 +1044,7 @@ $("day").value = state.day;
 $("day").addEventListener("change", () => {
   if (!$("day").value) return;
   state.day = $("day").value;
+  state.dayPinned = true;
   renderDays();
   resetForNewQuery();
   refresh();
@@ -866,20 +1052,326 @@ $("day").addEventListener("change", () => {
 
 $("market").addEventListener("change", () => {
   state.market = $("market").value;
-  resetForNewQuery();
-  refresh();
+  state.dayPinned = false;
+  syncClock().catch(() => {}).finally(() => { resetForNewQuery(); refresh(); });
 });
 
 $("search").addEventListener("input", () => renderList());
+$("quick-forecast").addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const home = $("qf-home").value.trim();
+  const away = $("qf-away").value.trim();
+  $("qf-out").innerHTML = `<div class="msg">Prédiction…</div>`;
+  try {
+    const f = await getJson(`/api/engine/forecast?home=${encodeURIComponent(home)}&away=${encodeURIComponent(away)}`);
+    $("qf-out").innerHTML = `<div class="pred-hero"><div class="pred-kicker">${esc(f.home)} - ${esc(f.away)}</div><div class="pred-call">${esc(f.pick_label)}</div><div class="pred-score">${esc(f.score)}</div><div class="pred-meta">${pct(f.pick_probability)} · xG ${num(f.expected_goals.home)} – ${num(f.expected_goals.away)} · les deux marquent : ${esc(f.btts)} · ${esc(f.goals)}</div></div>`;
+  } catch (e) {
+    $("qf-out").innerHTML = `<div class="err">${esc(e.message)}</div>`;
+  }
+});
 
+const PREFS_KEY = "betclic-prefs";
+const LEDGER_KEY = "betclic-ledger";
+function loadPrefs() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(PREFS_KEY) || "null");
+    if (raw && typeof raw === "object") return { bankroll: raw.bankroll ?? null, currency: raw.currency || "EUR", kelly: Number(raw.kelly) || 0.25, cap: Number(raw.cap) || 0.02 };
+  } catch (_) {}
+  return { bankroll: null, currency: "EUR", kelly: 0.25, cap: 0.02 };
+}
+function loadLedger() {
+  try { const raw = JSON.parse(localStorage.getItem(LEDGER_KEY) || "[]"); return Array.isArray(raw) ? raw : []; } catch (_) { return []; }
+}
+function savePrefs() { try { localStorage.setItem(PREFS_KEY, JSON.stringify(state.prefs)); } catch (_) {} }
+function saveLedger() { try { localStorage.setItem(LEDGER_KEY, JSON.stringify(state.ledger)); } catch (_) {} }
+function bankrollNow() {
+  let value = Number(state.prefs.bankroll) || 0;
+  for (const row of state.ledger) if (row.result === "won") value += Number(row.profit) || 0; else if (row.result === "lost") value -= Number(row.stake) || 0;
+  return value;
+}
+
+async function postJson(url, payload) {
+  const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+  const body = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(typeof body.detail === "string" ? body.detail : `Erreur HTTP ${r.status}`);
+  return body;
+}
+
+async function scheduleForecasts() {
+  if (state.sport !== "football") { state.forecasts = {}; return; }
+  const fixtures = [];
+  for (const m of state.matches) {
+    const parts = splitMatchName(m.name || "");
+    if (parts) fixtures.push({ id: String(m.id), home: parts[0], away: parts[1] });
+  }
+  const key = fixtures.map(f => f.id).join(",");
+  if (key === state.forecastKey) return;
+  state.forecastKey = key;
+  state.forecasts = {};
+  if (!fixtures.length) { renderList(); return; }
+  const seq = ++state.forecastSeq;
+  for (let i = 0; i < fixtures.length; i += 80) {
+    try {
+      const data = await postJson("/api/engine/forecasts", { fixtures: fixtures.slice(i, i + 80) });
+      if (seq !== state.forecastSeq) return;
+      for (const f of data.forecasts || []) if (f.id) state.forecasts[f.id] = f;
+      renderList();
+    } catch (_) { return; }
+  }
+}
+
+function showView(name) {
+  state.view = name;
+  const extra = ["builder", "bankroll", "performance", "assistant", "settings"].includes(name);
+  $("board").hidden = extra;
+  for (const id of ["builder", "bankroll", "performance", "assistant", "settings"]) {
+    $("view-" + id).hidden = name !== id;
+  }
+  document.body.dataset.mode = name === "analysis" || name === "matches" ? name : "";
+  document.querySelectorAll("[data-view]").forEach(el => el.setAttribute("aria-current", el.dataset.view === name || (name === "board" && el.dataset.view === "board") ? "true" : "false"));
+  if (name === "builder") renderBuilder();
+  if (name === "bankroll") renderBankroll();
+  if (name === "performance") renderPerformance();
+  if (name === "assistant") renderAssistant();
+  if (name === "settings") renderSettings();
+  if (name === "scanner") { $("board").hidden = false; $("scanner").scrollIntoView({ behavior: "smooth", block: "start" }); }
+}
+
+document.addEventListener("click", (ev) => {
+  const btn = ev.target.closest("[data-view]");
+  if (!btn || btn.tagName === "A") return;
+  showView(btn.dataset.view);
+});
+
+function renderBuilder() {
+  const box = $("builder-legs");
+  const fromList = Object.values(state.forecasts).filter(f => !f.error).slice(0, 12);
+  const chips = fromList.map(f => `<button class="ghost" type="button" data-add-forecast="${esc(f.id)}">${esc(f.home)} - ${esc(f.away)} · ${esc(f.pick_label)} ${esc(f.score)}</button>`).join(" ");
+  const rows = state.legs.map((leg, i) => `<tr><td>${esc(leg.label)}</td><td>${esc(leg.match || "—")}</td><td>${num(leg.odds)}</td><td>${leg.prob == null ? NA : pct(leg.prob)}</td><td><button class="ghost" type="button" data-drop-leg="${i}">retirer</button></td></tr>`).join("");
+  box.innerHTML = (chips ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">${chips}</div>` : `<div class="msg">Aucune prédiction chargée. Ouvrez le jour : les matchs reconnus apparaissent ici.</div>`) +
+    (rows ? `<table class="an-table"><tr><th>Sélection</th><th>Match</th><th>Cote</th><th>Proba</th><th></th></tr>${rows}</table>` : "");
+  renderBuilderOut();
+}
+function renderBuilderOut() {
+  const out = $("builder-out");
+  if (!state.legs.length) { out.innerHTML = ""; return; }
+  const odds = state.legs.reduce((p, l) => p * l.odds, 1);
+  const matches = state.legs.map(l => l.match).filter(Boolean);
+  const correlated = new Set(matches).size < matches.length;
+  const missing = state.legs.some(l => l.prob == null);
+  const prob = !correlated && !missing ? state.legs.reduce((p, l) => p * l.prob, 1) : null;
+  const ev = prob == null ? null : prob * odds - 1;
+  out.innerHTML = `<div class="pred-hero"><div class="pred-kicker">Combiné</div><div class="pred-score">${num(odds)}</div><div class="pred-meta">Probabilité ${prob == null ? "non disponible" : pct(prob)} · EV ${ev == null ? "non disponible" : (ev * 100).toFixed(1) + " %"}</div><div class="an-sub">${correlated ? "Même match : probabilités non multipliées." : "Hypothèse d'indépendance. Ce n'est pas un ticket envoyé."}</div></div>`;
+}
+$("builder-legs").addEventListener("click", (ev) => {
+  const add = ev.target.closest("[data-add-forecast]");
+  if (add) {
+    const f = state.forecasts[add.dataset.addForecast];
+    if (!f) return;
+    $("leg-label").value = `${f.pick_label} ${f.score}`;
+    $("leg-match").value = `${f.home} - ${f.away}`;
+    $("leg-prob").value = Number(f.pick_probability).toFixed(3);
+    $("leg-odds").focus();
+    return;
+  }
+  const drop = ev.target.closest("[data-drop-leg]");
+  if (drop) { state.legs.splice(Number(drop.dataset.dropLeg), 1); renderBuilder(); }
+});
+$("leg-add").addEventListener("click", () => {
+  const odds = Number($("leg-odds").value);
+  const probRaw = $("leg-prob").value;
+  if (!(odds > 1)) return;
+  state.legs.push({
+    label: $("leg-label").value.trim() || "Sélection",
+    match: $("leg-match").value.trim(),
+    odds,
+    prob: probRaw === "" ? null : Number(probRaw),
+  });
+  renderBuilder();
+});
+$("leg-clear").addEventListener("click", () => { state.legs = []; renderBuilder(); });
+
+function renderBankroll() {
+  const start = state.prefs.bankroll;
+  const box = $("bankroll-body");
+  if (!(start > 0)) {
+    box.innerHTML = `<div class="msg">Bankroll non disponible. Saisissez un capital dans Paramètres. Aucun historique n'est fabriqué.</div>`;
+    return;
+  }
+  const points = [start];
+  let cursor = start;
+  for (const row of state.ledger) {
+    if (row.result === "won") cursor += Number(row.profit) || 0;
+    else if (row.result === "lost") cursor -= Number(row.stake) || 0;
+    else continue;
+    points.push(cursor);
+  }
+  const chart = points.length < 2
+    ? `<div class="msg">Évolution non disponible : enregistrez un résultat pour tracer la courbe.</div>`
+    : sparkline(points);
+  const picks = Object.values(state.forecasts).filter(f => !f.error).slice(0, 5);
+  const suggest = picks.map(f => `<tr><td>${esc(f.home)} - ${esc(f.away)}</td><td>${esc(f.pick_label)} ${esc(f.score)}</td><td>${pct(f.pick_probability)}</td><td><button class="ghost" type="button" data-stake="${esc(f.id)}">Mise suggérée</button></td></tr>`).join("");
+  const ledger = state.ledger.map((row, i) => `<tr><td>${esc(row.label)}</td><td>${num(row.stake)}</td><td>${esc(row.result)}</td><td><button class="ghost" type="button" data-settle="${i}" data-result="won">gagné</button> <button class="ghost" type="button" data-settle="${i}" data-result="lost">perdu</button></td></tr>`).join("");
+  box.innerHTML = `<div class="pred-hero"><div class="pred-kicker">Capital local</div><div class="pred-score">${bankrollNow().toFixed(0)} ${esc(state.prefs.currency || "")}</div><div class="pred-meta">Départ ${Number(start).toFixed(0)}. Aucune mise automatique.</div></div>${chart}
+    <h3 style="font-size:14px">Mise suggérée sur une prédiction</h3>
+    <table class="an-table"><tr><th>Match</th><th>Prédiction</th><th>Proba</th><th></th></tr>${suggest || `<tr><td colspan="4">Aucune prédiction chargée.</td></tr>`}</table>
+    <div id="stake-out" class="an-sub"></div>
+    <h3 style="font-size:14px">Résultats enregistrés</h3>
+    ${ledger ? `<table class="an-table"><tr><th>Sélection</th><th>Mise</th><th>Résultat</th><th></th></tr>${ledger}</table>` : `<div class="msg">Aucun résultat enregistré.</div>`}`;
+}
+function sparkline(points) {
+  const w = 520, h = 140, pad = 12;
+  const min = Math.min(...points), max = Math.max(...points);
+  const span = max - min || 1;
+  const coords = points.map((v, i) => {
+    const x = pad + (i / (points.length - 1)) * (w - pad * 2);
+    const y = h - pad - ((v - min) / span) * (h - pad * 2);
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(" ");
+  return `<svg class="svg-chart" viewBox="0 0 ${w} ${h}" role="img" aria-label="Évolution de la bankroll enregistrée"><polyline fill="none" stroke="#3dff9a" stroke-width="3" points="${coords}"/></svg>`;
+}
+$("bankroll-body").addEventListener("click", async (ev) => {
+  const stakeBtn = ev.target.closest("[data-stake]");
+  if (stakeBtn) {
+    const f = state.forecasts[stakeBtn.dataset.stake];
+    const odds = Number(prompt("Cote décimale Betclic de cette sélection (aucune mise ne sera envoyée)"));
+    if (!(odds > 1) || !f) return;
+    try {
+      const res = await postJson("/api/staking/suggest", { bankroll: bankrollNow(), prob: f.pick_probability, odds, fraction: state.prefs.kelly, cap_pct: state.prefs.cap });
+      $("stake-out").textContent = `Mise suggérée : ${res.stake.toFixed(2)} ${state.prefs.currency || ""} (Kelly ${state.prefs.kelly}, plafond ${state.prefs.cap}). Non envoyée.`;
+      if (res.stake > 0 && confirm("Enregistrer cette mise comme en attente dans le suivi local ?")) {
+        state.ledger.push({ label: `${f.home} - ${f.away} ${f.pick_label}`, stake: res.stake, odds, profit: res.stake * (odds - 1), result: "pending" });
+        saveLedger();
+        renderBankroll();
+        renderKpis();
+      }
+    } catch (e) { $("stake-out").textContent = e.message; }
+    return;
+  }
+  const settle = ev.target.closest("[data-settle]");
+  if (settle) {
+    state.ledger[Number(settle.dataset.settle)].result = settle.dataset.result;
+    saveLedger();
+    renderBankroll();
+    renderKpis();
+  }
+});
+
+function renderPerformance() {
+  const box = $("performance-body");
+  if (state.validation === undefined) { box.innerHTML = `<div class="msg">Chargement…</div>`; return; }
+  if (!state.validation) { box.innerHTML = `<div class="msg">Rapport absent. Lancez python scripts/validate_engine.py.</div>`; return; }
+  const s = state.validation.summary, b = s.bets;
+  const windows = (state.validation.windows || []).map(w => `<tr><td>${esc(w.window.cutoff)}</td><td>${w.bets.count}</td><td>${pct(w.bets.roi)}</td><td>${num(w.model.brier, 3)}</td><td>${num(w.bookmaker_demargined.brier, 3)}</td></tr>`).join("");
+  box.innerHTML = `<div class="an-tiles" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr))">
+      <div class="an-tile">ROI football<b>${pct(b.roi)}</b></div>
+      <div class="an-tile">Paris simulés<b>${b.count}</b></div>
+      <div class="an-tile">Drawdown<b>${num(b.max_drawdown_units, 0)}</b></div>
+      <div class="an-tile">CLV<b>${s.clv == null ? "n/d" : esc(s.clv)}</b></div>
+    </div>
+    <div class="an-summary bad">${esc(s.profitability_claim)}. IC 95 % ${b.roi_ci95 ? pct(b.roi_ci95[0]) + " à " + pct(b.roi_ci95[1]) : "non disponible"}.</div>
+    <table class="an-table"><tr><th>Saison test</th><th>Paris</th><th>ROI</th><th>Brier modèle</th><th>Brier bookmaker</th></tr>${windows}</table>
+    <div class="legend">Basketball, tennis et rugby : non disponible. Le moteur ne couvre que le football. ${esc(state.validation.note || "")}</div>`;
+}
+
+function answerQuestion(q) {
+  const text = q.toLowerCase();
+  const forecasts = Object.values(state.forecasts).filter(f => !f.error);
+  if (text.includes("rentab") || text.includes("roi") || text === "roi") {
+    const b = state.validation && state.validation.summary && state.validation.summary.bets;
+    if (!b) return "Rapport de validation absent. Rentabilité : non démontrée.";
+    return `ROI hors échantillon : ${(b.roi * 100).toFixed(1)} % sur ${b.count} paris simulés. ${state.validation.summary.profitability_claim}. Ce n'est pas une promesse de gain.`;
+  }
+  if (text.includes("value") || text.includes("pick")) {
+    const picks = currentRuns().flatMap(r => justifiedPicks(r.engine).map(p => `${r.match.name} · ${p.label} · EV ${(p.expected_value * 100).toFixed(1)} %`));
+    return picks.length ? picks.join("\n") : "Aucune value bet justifiée dans les matchs analysés de cette session.";
+  }
+  const ranked = forecasts.slice().sort((a, b) => b.pick_probability - a.pick_probability).slice(0, 8);
+  if (!ranked.length) return "Aucune prédiction chargée pour ce jour. Choisissez un jour où des matchs de football sont listés.";
+  return ranked.map(f => `${f.home} - ${f.away} : ${f.pick_label}, score ${f.score} (${(f.pick_probability * 100).toFixed(0)} %)`).join("\n");
+}
+function pushChat(role, text) {
+  $("chat").insertAdjacentHTML("beforeend", `<div class="bubble ${role === "me" ? "me" : ""}">${esc(text).replaceAll("\n", "<br>")}</div>`);
+}
+function renderAssistant() {
+  const box = $("gpt-box");
+  if (!state.status) { box.innerHTML = `<div class="msg">État des clés en cours…</div>`; return; }
+  box.innerHTML = state.status.soccergpt_configured
+    ? `<form id="gpt-form" class="form-grid"><label>Domicile<input id="gpt-home" required></label><label>Extérieur<input id="gpt-away" required></label><button class="primary" type="submit">SoccerGPT</button></form><div id="gpt-out" class="an-sub"></div>`
+    : `<div class="msg">SoccerGPT non disponible : clés absentes dans .env. L'assistant ci-dessus utilise uniquement le moteur local.</div>`;
+  const form = $("gpt-form");
+  if (form) form.addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    $("gpt-out").textContent = "Analyse en cours…";
+    try {
+      const data = await getJson(`/api/predict?home=${encodeURIComponent($("gpt-home").value)}&away=${encodeURIComponent($("gpt-away").value)}`);
+      $("gpt-out").textContent = data.prediction || data.score || JSON.stringify(data).slice(0, 500);
+    } catch (e) { $("gpt-out").textContent = e.message; }
+  });
+}
+document.querySelectorAll("[data-ask]").forEach(btn => btn.addEventListener("click", () => pushChat("bot", answerQuestion(btn.dataset.ask))));
+$("ask-form").addEventListener("submit", (ev) => {
+  ev.preventDefault();
+  const q = $("ask-input").value.trim();
+  if (!q) return;
+  pushChat("me", q);
+  pushChat("bot", answerQuestion(q));
+  $("ask-input").value = "";
+});
+
+async function renderSettings() {
+  $("set-bankroll").value = state.prefs.bankroll ?? "";
+  $("set-currency").value = state.prefs.currency || "EUR";
+  $("set-kelly").value = String(state.prefs.kelly);
+  $("set-cap").value = String(state.prefs.cap);
+  const box = $("settings-status");
+  if (!state.status) { box.innerHTML = `<div class="msg">Chargement…</div>`; return; }
+  const s = state.status;
+  box.innerHTML = `<table class="an-table">
+    <tr><td>Marché serveur</td><td>${esc(s.market)}</td></tr>
+    <tr><td>Seuils de marge</td><td>${esc(s.min_margin_pct)} % – ${esc(s.max_margin_pct)} %</td></tr>
+    <tr><td>Jeu historique</td><td>${s.dataset_present ? "présent" : "absent"}</td></tr>
+    <tr><td>Rapport de validation</td><td>${s.validation_present ? "présent" : "absent"}</td></tr>
+    <tr><td>Telegram</td><td>${s.telegram_configured ? "configuré" : "non configuré"}</td></tr>
+    <tr><td>SoccerGPT</td><td>${s.soccergpt_configured ? "configuré" : "clés absentes"}</td></tr>
+    <tr><td>Mise automatique</td><td>${s.automatic_betting ? "oui" : "non"}</td></tr>
+  </table>`;
+}
+$("set-save").addEventListener("click", () => {
+  const raw = $("set-bankroll").value;
+  state.prefs = {
+    bankroll: raw === "" ? null : Number(raw),
+    currency: $("set-currency").value.trim() || "EUR",
+    kelly: Number($("set-kelly").value),
+    cap: Number($("set-cap").value),
+  };
+  savePrefs();
+  renderKpis();
+  renderSettings();
+});
+
+async function syncClock() {
+  const params = new URLSearchParams();
+  if (state.market) params.set("market", state.market);
+  const clock = await getJson(`/api/clock?${params}`);
+  state.timezone = clock.timezone;
+  state.localToday = clock.today;
+  if (!state.dayPinned) {
+    state.day = clock.today;
+    $("day").value = state.day;
+  }
+  renderDays();
+}
+
+state.prefs = loadPrefs();
+state.ledger = loadLedger();
 renderDays();
+getJson("/api/status").then(s => { state.status = s; }).catch(() => { state.status = null; });
 getJson("/api/engine/validation")
   .then(v => { state.validation = v; })
   .catch(() => { state.validation = null; })
   .finally(() => { renderKpis(); if (state.anTab === "evidence") showAnTab("evidence"); });
-loadSnapshot();
-refresh();
-connectStream();
+syncClock().catch(() => {}).finally(() => { loadSnapshot(); refresh(); connectStream(); });
 setInterval(() => { if (!document.hidden && !streamOk) refresh({ silent: true }); }, REFRESH_MS);
 setInterval(tickAge, 1000);
 document.addEventListener("visibilitychange", () => { if (!document.hidden) refresh({ silent: true }); });

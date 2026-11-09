@@ -81,6 +81,71 @@ def test_engine_match_unexpected_error_returns_explicit_detail(monkeypatch):
     assert "KeyError" in r.json()["detail"]
 
 
+def test_forecast_is_point_prediction_without_interval(monkeypatch):
+    def fake(home, away, odds=None):
+        return {
+            "home": home, "away": away,
+            "markets": {
+                "match_result": {"home": 0.55, "draw": 0.25, "away": 0.20},
+                "top_scores": [{"home": 2, "away": 1, "p": 0.12}],
+                "btts": {"yes": 0.54, "no": 0.46},
+                "over_under": {"2.5": {"over": 0.51, "under": 0.49}},
+            },
+            "expected_goals": {"home": 1.7, "away": 1.0},
+            "data_quality": "moyenne",
+            "data_last_match": "2026-09-03",
+        }
+
+    monkeypatch.setattr(service, "predict", fake)
+    out = service.forecast("Lyon", "Lille")
+    assert out["pick_label"] == "Victoire domicile"
+    assert out["score"] == "2-1"
+    assert "ev_interval" not in out
+
+
+def test_forecasts_batch_keeps_going_when_a_team_is_unknown(monkeypatch):
+    def fake(home, away):
+        if home == "Inconnu":
+            raise service.UnknownTeam("Inconnu")
+        return {"home": home, "away": away, "pick_label": "Match nul", "score": "1-1"}
+
+    monkeypatch.setattr(service, "forecast", fake)
+    r = TestClient(api.app).post("/api/engine/forecasts", json={"fixtures": [
+        {"home": "Lyon", "away": "Lille", "id": "1"},
+        {"home": "Inconnu", "away": "Lille", "id": "2"},
+    ]})
+    assert r.status_code == 200
+    body = r.json()["forecasts"]
+    assert body[0]["score"] == "1-1"
+    assert "inconnu" in body[1]["error"].lower() or body[1]["error"] == "Inconnu"
+    assert body[1]["id"] == "2"
+
+
+def test_staking_suggest_never_places_a_bet():
+    r = TestClient(api.app).post("/api/staking/suggest", json={
+        "bankroll": 1000, "prob": 0.55, "odds": 2.1, "fraction": 0.25, "cap_pct": 0.02,
+    })
+    assert r.status_code == 200
+    body = r.json()
+    assert body["placed"] is False
+    assert body["stake"] > 0
+
+
+def test_status_does_not_expose_secrets():
+    body = TestClient(api.app).get("/api/status").json()
+    assert body["automatic_betting"] is False
+    blob = str(body).lower()
+    assert "token" not in blob
+    assert "openai" not in blob
+    assert "sportmonks" not in blob
+
+
+def test_clock_fr_uses_paris_timezone():
+    body = TestClient(api.app).get("/api/clock", params={"market": "FR"}).json()
+    assert body["timezone"] == "Europe/Paris"
+    assert len(body["today"]) == 10
+
+
 def test_engine_match_missing_dataset_returns_503(monkeypatch):
     def missing(home, away, odds=None):
         raise FileNotFoundError("data/Matches.csv")

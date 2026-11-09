@@ -9,6 +9,7 @@ n'étaient pas marqués). Le seul repère sûr est donc l'heure de coup d'envoi.
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 # Un match dure ~2 h ; on garde une marge (prolongations, arrêts de jeu).
 DEFAULT_DURATION_H = 3
@@ -58,3 +59,32 @@ def local_time(kickoff_iso: str | None) -> str:
     """Heure de coup d'envoi ``HH:MM`` (UTC = heure locale ivoirienne)."""
     kickoff = parse_kickoff(kickoff_iso)
     return kickoff.strftime("%H:%M") if kickoff else "—"
+
+
+# Le calendrier affiché doit être celui du marché, pas l'UTC brut.
+# Un match à 00:30 à Paris est encore la veille en UTC : sans ce décalage,
+# « demain » sur betclic.fr ne correspond pas à la liste.
+MARKET_ZONES = {
+    "FR": "Europe/Paris",
+    "CI": "Africa/Abidjan",
+    "SN": "Africa/Dakar",
+}
+
+
+def market_zone(market: str) -> ZoneInfo:
+    return ZoneInfo(MARKET_ZONES.get((market or "CI").upper(), "Africa/Abidjan"))
+
+
+def market_today(market: str, now: datetime | None = None) -> str:
+    moment = now or datetime.now(timezone.utc)
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=timezone.utc)
+    return moment.astimezone(market_zone(market)).date().isoformat()
+
+
+def kickoff_local_day(kickoff_iso: str | None, market: str) -> str:
+    """Jour civil du coup d'envoi dans le fuseau du marché. Vide si la date est illisible."""
+    kickoff = parse_kickoff(kickoff_iso)
+    if kickoff is None:
+        return ""
+    return kickoff.astimezone(market_zone(market)).date().isoformat()
