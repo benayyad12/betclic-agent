@@ -115,8 +115,8 @@ Le pré-chargement web (`api.py`, `_prefetch_markets`) suit la même règle : un
 match à la fois, espacé de `REQUEST_DELAY_S`. Il n'y a jamais deux requêtes Betclic en vol
 depuis le pré-chargement (test `test_prefetch_never_runs_two_requests_at_once`).
 
-Les pages de liste du jour sont encore récupérées en parallèle (`MAX_PAGES`) : c'est un
-écart à la règle « une requête à la fois », à arbitrer.
+Les pages de liste du jour sont récupérées à 2 maximum en parallèle (`LIST_CONCURRENCY`) : c'est un
+écart assumé à la règle « une requête à la fois », choisi pour la rapidité. Le pré-chargement des cotes reste séquentiel.
 
 ## Backtest de référence (`historical.py`, `backtest.py`)
 

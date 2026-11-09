@@ -53,6 +53,8 @@ MATCH_CACHE_TTL_S = 30
 _cache: dict[tuple[str, str], tuple[float, dict]] = {}
 _match_cache: dict[tuple[int, str], tuple[float, dict]] = {}
 PREFETCH_LIMIT = 40
+# Pages de la liste du jour récupérées en parallèle (2 max) ; le pré-chargement des cotes reste séquentiel.
+LIST_CONCURRENCY = 2
 _background: set[asyncio.Task] = set()
 
 # Pool dédié : assez de threads pour que toutes les pages d'une journée partent en même temps
@@ -92,10 +94,13 @@ async def _collect_concurrent(sport: str, market: str | None, client: BetclicMar
     max_matches = MAX_PAGES * PAGE_SIZE
     last_offset = min(total, max_matches) if total else max_matches
     offsets = list(range(step, last_offset, step))
-    results = await asyncio.gather(
-        *(_run_page(sport, market, o, step) for o in offsets),
-        return_exceptions=True,
-    )
+    sem = asyncio.Semaphore(LIST_CONCURRENCY)
+
+    async def bounded(o: int):
+        async with sem:
+            return await _run_page(sport, market, o, step)
+
+    results = await asyncio.gather(*(bounded(o) for o in offsets), return_exceptions=True)
     pages = [first] + [r for r in results if not isinstance(r, BaseException)]
     failed = sum(isinstance(r, BaseException) for r in results)
 
