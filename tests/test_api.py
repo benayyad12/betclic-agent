@@ -47,3 +47,15 @@ def test_analyze_unknown_match_is_not_cached(fake, monkeypatch):
     assert fake.get("/api/analyze/7?market=CI").status_code == 404
     assert fake.get("/api/analyze/7?market=CI").status_code == 404
     assert Empty.calls == 2
+
+
+def test_prefetch_fills_cache_so_click_is_instant(monkeypatch):
+    import asyncio
+
+    FakeClient.calls = 0
+    api._match_cache.clear()
+    monkeypatch.setattr(api, "_client", lambda market: FakeClient())
+    asyncio.run(api._prefetch_markets([1, 2, 3], "CI"))
+    assert FakeClient.calls == 3
+    asyncio.run(api._markets_for(2, "CI"))
+    assert FakeClient.calls == 3

@@ -174,6 +174,8 @@ const SPORT_LABEL = { football: "Football", basketball: "Basketball", tennis: "T
 const STATUS_LABEL = { in_play: "En cours", upcoming: "À venir", past: "Terminé", unknown: "Heure ?" };
 const STATUS_ORDER = ["in_play", "upcoming", "past", "unknown"];
 const REFRESH_MS = 30000;
+const ANALYSIS_MS = 15000;
+let analysisTimer = null;
 const PLACEHOLDER = `<div class="placeholder"><div class="big">📊</div>Cliquez sur un match pour voir ses cotes, sa marge et les chances selon les cotes.</div>`;
 
 const state = {
@@ -182,6 +184,8 @@ const state = {
   market: "",
   matches: [],
   signature: "",
+  analysisSig: "",
+  analysisAt: "",
   receivedAt: 0,
   selectedId: null,
   seq: 0,
@@ -317,22 +321,38 @@ $("list").addEventListener("click", (ev) => {
   document.querySelectorAll(".row[aria-current='true']").forEach(r => r.setAttribute("aria-current", "false"));
   row.setAttribute("aria-current", "true");
   analyzeMatch(row.dataset.id, match ? match.name : "");
+  startAnalysisPoll(row.dataset.id, match ? match.name : "");
 });
 
-async function analyzeMatch(id, label) {
+async function analyzeMatch(id, label, { silent = false } = {}) {
   const seq = ++state.analysisSeq;
   const box = $("analysis");
-  box.innerHTML = `<div class="msg">Analyse de ${esc(label)}…</div>`;
+  if (!silent) {
+    state.analysisSig = "";
+    box.innerHTML = `<div class="msg">Analyse de ${esc(label)}…</div>`;
+  }
   try {
     const params = new URLSearchParams();
     if (state.market) params.set("market", state.market);
     const data = await getJson(`/api/analyze/${encodeURIComponent(id)}?${params}`);
     if (seq !== state.analysisSeq) return;
+    // Mise à jour silencieuse : on ne re-rend que si les cotes ont bougé.
+    const sig = JSON.stringify(data.markets);
+    if (silent && sig === state.analysisSig) return;
+    state.analysisSig = sig;
+    state.analysisAt = new Date().toTimeString().substring(0, 8);
     renderAnalysis(state.matches.find(m => String(m.id) === String(id)) || { name: label }, data);
   } catch (e) {
     if (seq !== state.analysisSeq) return;
-    box.innerHTML = `<div class="err">${esc(e.message)}</div>`;
+    if (!silent) box.innerHTML = `<div class="err">${esc(e.message)}</div>`;
   }
+}
+
+function startAnalysisPoll(id, label) {
+  clearInterval(analysisTimer);
+  analysisTimer = setInterval(() => {
+    if (!document.hidden && String(state.selectedId) === String(id)) analyzeMatch(id, label, { silent: true });
+  }, ANALYSIS_MS);
 }
 
 // Marge du bookmaker (en %) : sous 6 % les cotes sont avantageuses, au-delà de 12 % le bookmaker prend cher.
@@ -358,6 +378,7 @@ function renderAnalysis(match, data) {
   let html = `<div class="an-head">
     <div class="an-title">${esc(match.name)}</div>
     <div class="an-meta">${esc(match.competition || "")} • ${esc(when)} • ${esc(STATUS_LABEL[match.status] || "")}</div>
+    <div class="an-meta live-cotes"><span class="dot"></span> Cotes mises à jour toutes les 15 s${state.analysisAt ? " • à " + esc(state.analysisAt) : ""}</div>
   </div>`;
 
   if (reliable.length) {
@@ -420,6 +441,7 @@ function resetForNewQuery() {
   state.signature = "";
   state.selectedId = null;
   state.analysisSeq++;
+  clearInterval(analysisTimer);
   $("analysis").innerHTML = PLACEHOLDER;
 }
 

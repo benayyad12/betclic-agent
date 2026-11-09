@@ -52,6 +52,9 @@ MATCH_CACHE_TTL_S = 30
 # Cache des matchs complets par (sport, marché) ; seuls les résultats sans page en échec sont mis en cache.
 _cache: dict[tuple[str, str], tuple[float, dict]] = {}
 _match_cache: dict[tuple[int, str], tuple[float, dict]] = {}
+PREFETCH_CONCURRENCY = 6
+PREFETCH_LIMIT = 40
+_background: set[asyncio.Task] = set()
 
 # Pool dédié : assez de threads pour que toutes les pages d'une journée partent en même temps
 # (le pool par défaut est limité à CPU+4 threads).
@@ -163,6 +166,13 @@ async def today(
     for match in matches:
         match["status"] = match_status(match["date"], now)
 
+    # Pré-chargement des cotes des matchs encore ouverts (plafonné) : la réponse part sans attendre.
+    open_ids = [m["id"] for m in matches if m["status"] in (UPCOMING, IN_PLAY)][:PREFETCH_LIMIT]
+    if open_ids:
+        task = asyncio.create_task(_prefetch_markets(open_ids, client.market))
+        _background.add(task)
+        task.add_done_callback(_background.discard)
+
     return {
         "market": client.market,
         "sport": sport,
@@ -186,19 +196,12 @@ async def today(
 
 @app.get("/api/analyze/{match_id}")
 async def analyze(match_id: int, market: Market | None = None) -> dict:
-    """Marchés d'un match. Mis en cache 30 s par (match, marché) pour les clics répétés."""
+    """Marchés d'un match (cache 30 s par match et marché)."""
     name = (market or Settings().market).upper()
-    key = (match_id, name)
-    entry = _match_cache.get(key)
-    if entry and time.monotonic() - entry[0] < MATCH_CACHE_TTL_S:
-        markets = entry[1]
-    else:
-        try:
-            markets = await asyncio.to_thread(lambda: _client(name).get_main_markets(match_id))
-        except Exception as exc:
-            raise HTTPException(status_code=502, detail=f"Betclic indisponible : {exc}") from exc
-        if markets:
-            _match_cache[key] = (time.monotonic(), markets)
+    try:
+        markets = await _markets_for(match_id, name)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Betclic indisponible : {exc}") from exc
     if not markets:
         raise HTTPException(status_code=404, detail="Aucun marché pour ce match.")
     return {
@@ -206,3 +209,30 @@ async def analyze(match_id: int, market: Market | None = None) -> dict:
         "market": name,
         "markets": analyze_markets(markets),
     }
+
+
+async def _markets_for(match_id: int, name: str) -> dict:
+    """Renvoie les marchés depuis le cache, sinon les récupère (et les met en cache)."""
+    key = (match_id, name)
+    entry = _match_cache.get(key)
+    if entry and time.monotonic() - entry[0] < MATCH_CACHE_TTL_S:
+        return entry[1]
+    markets = await asyncio.to_thread(lambda: _client(name).get_main_markets(match_id))
+    if markets:
+        _match_cache[key] = (time.monotonic(), markets)
+    return markets
+
+
+async def _prefetch_markets(match_ids: list[int], name: str) -> None:
+    """Charge en arrière-plan les marchés des matchs affichés, pour que le clic soit instantané.
+    Concurrence bornée et erreurs ignorées : c'est une optimisation, pas une obligation."""
+    sem = asyncio.Semaphore(PREFETCH_CONCURRENCY)
+
+    async def one(match_id: int) -> None:
+        async with sem:
+            try:
+                await _markets_for(match_id, name)
+            except Exception:
+                pass
+
+    await asyncio.gather(*(one(m) for m in match_ids))
