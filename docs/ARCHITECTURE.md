@@ -35,6 +35,8 @@
 | `markets.py` | Calculer les probabilités implicites, les marges, et détecter les opportunités |
 | `timing.py` | Estimer le statut temporel des matchs (le backend n'en fournit aucun de fiable) |
 | `notifier.py` | Présenter les résultats (console) et alerter (Telegram) |
+| `db/` | Persistance SQLAlchemy 2 : matchs, marchés, historique des cotes en ajout seul, runs |
+| `alembic/` | Migrations du schéma (`alembic upgrade head`, URL lue depuis `DATABASE_URL`) |
 | `main.py` | Exposer le tout en ligne de commande |
 
 ## Décisions de conception

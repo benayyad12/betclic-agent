@@ -45,6 +45,11 @@ class Settings:
     min_margin_pct: float = field(default_factory=lambda: _env_float("MIN_MARGIN_PCT", 6.0))
     max_margin_pct: float = field(default_factory=lambda: _env_float("MAX_MARGIN_PCT", 12.0))
 
+    # Persistance (SQLite en local ; toute URL SQLAlchemy 2 compatible, ex. PostgreSQL)
+    database_url: str = field(
+        default_factory=lambda: os.getenv("DATABASE_URL", "sqlite:///data/betclic.db")
+    )
+
     # Alertes
     telegram_token: str = field(default_factory=lambda: os.getenv("TELEGRAM_BOT_TOKEN", ""))
     telegram_chat_id: str = field(default_factory=lambda: os.getenv("TELEGRAM_CHAT_ID", ""))
